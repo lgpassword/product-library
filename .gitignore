@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# 上传的真实附件与文件库（演示图保留在 uploads/images/ 中）
+uploads/library/*
+!uploads/library/.gitkeep
+uploads/files/*
+!uploads/files/.gitkeep
+
+# 备份 / 日志
+backups/
+*.log
+*.bak
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp

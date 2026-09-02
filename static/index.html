@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>康复特教产品库</title>
+<link rel="stylesheet" href="style.css?v=2026090219">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<!-- 欢迎页：进入系统时显示，全屏盖住系统后播放动画 -->
+<div id="splash" onclick="dismissSplash()">
+  <div class="splash-orb o1"></div>
+  <div class="splash-orb o2"></div>
+  <div class="splash-orb o3"></div>
+  <!-- 简笔画场景：漂浮涂鸦 + 走路小人 -->
+  <div class="splash-doodles">
+    <svg viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <style>
+          .dl { stroke: #fff; stroke-width: 2.2; stroke-linecap: round; fill: none; opacity: .6; }
+          .dl.fill { fill: rgba(255,255,255,.16); }
+        </style>
+      </defs>
+      <!-- 地面虚线 -->
+      <line x1="0" y1="250" x2="1000" y2="250" stroke="rgba(255,255,255,.22)" stroke-width="2.5" stroke-dasharray="2 16" stroke-linecap="round"/>
+
+      <!-- 天上漂浮涂鸦（外层 g 用 SVG transform 定位，内层 .dood 做漂浮动画） -->
+      <g transform="translate(150 70)"><g class="dood" style="animation-delay:0s"><path class="dl fill" d="M0 13 C-9 2 -12 -6 -6 -10 C-2 -12 0 -8 0 -6 C0 -8 2 -12 6 -10 C12 -6 9 2 0 13 Z"/></g></g>
+      <g transform="translate(855 62)"><g class="dood" style="animation-delay:-2s"><path class="dl" d="M0 -11 V11 M-11 0 H11"/></g></g>
+      <g transform="translate(400 46)"><g class="dood" style="animation-delay:-4s"><polygon class="dl fill" points="0,-13 3.8,-4.2 13,-4.2 5.6,1.6 8.2,10.6 0,5.4 -8.2,10.6 -5.6,1.6 -13,-4.2 -3.8,-4.2"/></g></g>
+      <g transform="translate(640 34)"><g class="dood" style="animation-delay:-1.4s"><circle class="dl" cx="0" cy="0" r="11"/><circle cx="-4" cy="-3" r="1.4" fill="#fff"/><circle cx="4" cy="-3" r="1.4" fill="#fff"/><path class="dl" d="M-5 2 Q0 7 5 2"/></g></g>
+      <g transform="translate(905 118)"><g class="dood" style="animation-delay:-3s"><g transform="rotate(-12)"><ellipse class="dl fill" cx="0" cy="14" rx="5" ry="3.6"/><path class="dl" d="M0 11 V-12 M0 -20 Q9 -18 11 -11"/></g></g></g>
+      <g transform="translate(120 165)"><g class="dood" style="animation-delay:-5s"><path class="dl" d="M-18 0 L-11 -7 L-5 0 L0 -13 L6 2 L11 -5 L18 0"/></g></g>
+      <g transform="translate(250 130)"><g class="dood" style="animation-delay:-1s"><circle class="dl" cx="-7" cy="0" r="4.6"/><circle class="dl" cx="7" cy="0" r="4.6"/><path class="dl" d="M0 -11 L0 -3"/><path class="dl" d="M0 -1.5 C0 3 -2.6 6 -7 7.5 C-4.4 9.5 0 11 0 13 M0 -1.5 C0 3 2.6 6 7 7.5 C4.4 9.5 0 11 0 13"/></g></g>
+      <g transform="translate(60 60)"><g class="dood" style="animation-delay:-2.6s"><circle class="dl" cx="0" cy="0" r="6.5"/><path class="dl" d="M0 -6.5 V-14 M0 -9 H-6 M0 -13 H6"/></g></g>
+
+      <!-- 地面小花/小草 -->
+      <g transform="translate(120 236)"><g class="dood" style="animation-delay:-3.4s"><circle class="dl fill" cx="0" cy="0" r="3"/><path class="dl" d="M0 -3 C-5 -4 -6 1 -2 1 M0 -3 C5 -4 6 1 2 1 M0 -3 C0 -9 0 -8 0 -12"/></g></g>
+      <g transform="translate(560 238)"><g class="dood" style="animation-delay:-1.8s"><path class="dl" d="M0 0 C-3 -5 -1 -9 0 -12 M2 0 C2 -4 4 -7 6 -9 M-2 0 C-2 -4 -4 -7 -6 -9"/></g></g>
+      <g transform="translate(800 234)"><g class="dood" style="animation-delay:-5.4s"><path class="dl" d="M0 0 V-11 M0 -11 C-4 -11 -6 -8 -5 -5 M0 -11 C4 -11 6 -8 5 -5"/></g></g>
+      <g transform="translate(320 238)"><g class="dood" style="animation-delay:-4.2s"><circle class="dl fill" cx="-5" cy="0" r="2.4"/><circle class="dl fill" cx="5" cy="0" r="2.4"/><circle class="dl fill" cx="0" cy="-5" r="2.4"/><circle class="dl fill" cx="0" cy="5" r="2.4"/><circle class="dl" cx="0" cy="0" r="1.6"/></g></g>
+
+      <!-- 简笔画小人：来回散步 -->
+      <g class="wx wx1"><g transform="translate(0,-250)">
+        <g class="person">
+          <circle class="head" cx="0" cy="-34" r="9.6" fill="none" stroke="#fff" stroke-width="2.3"/>
+          <path class="face" d="M-4 -33 Q0 -29.5 4 -33" fill="none" stroke="#fff" stroke-width="1.6"/>
+          <line class="body" x1="0" y1="-24" x2="0" y2="-6" stroke="#fff" stroke-width="2.3"/>
+          <line class="arm arm-l" x1="0" y1="-20" x2="-10" y2="-9" stroke="#fff" stroke-width="2.1"/>
+          <line class="arm arm-r" x1="0" y1="-20" x2="10" y2="-9" stroke="#fff" stroke-width="2.1"/>
+          <line class="leg leg-l" x1="0" y1="-6" x2="-8" y2="0" stroke="#fff" stroke-width="2.3"/>
+          <line class="leg leg-r" x1="0" y1="-6" x2="8" y2="0" stroke="#fff" stroke-width="2.3"/>
+        </g>
+      </g></g>
+
+      <g class="wx wx2"><g transform="translate(0,-258) scale(.82)">
+        <g class="person">
+          <circle class="head" cx="0" cy="-34" r="9.6" fill="none" stroke="#fff" stroke-width="2.3"/>
+          <path class="face" d="M-4 -33 Q0 -29.5 4 -33" fill="none" stroke="#fff" stroke-width="1.6"/>
+          <line class="body" x1="0" y1="-24" x2="0" y2="-6" stroke="#fff" stroke-width="2.3"/>
+          <line class="arm arm-l" x1="0" y1="-20" x2="-10" y2="-9" stroke="#fff" stroke-width="2.1"/>
+          <line class="arm arm-r" x1="0" y1="-20" x2="10" y2="-9" stroke="#fff" stroke-width="2.1"/>
+          <line class="leg leg-l" x1="0" y1="-6" x2="-8" y2="0" stroke="#fff" stroke-width="2.3"/>
+          <line class="leg leg-r" x1="0" y1="-6" x2="8" y2="0" stroke="#fff" stroke-width="2.3"/>
+        </g>
+      </g></g>
+
+      <g class="wx wx3"><g transform="translate(0,-244) scale(1.18)">
+        <g class="person">
+          <circle class="head" cx="0" cy="-34" r="9.6" fill="none" stroke="#fff" stroke-width="2.3"/>
+          <path class="face" d="M-4 -33 Q0 -29.5 4 -33" fill="none" stroke="#fff" stroke-width="1.6"/>
+          <line class="body" x1="0" y1="-24" x2="0" y2="-6" stroke="#fff" stroke-width="2.3"/>
+          <line class="arm arm-l" x1="0" y1="-20" x2="-10" y2="-9" stroke="#fff" stroke-width="2.1"/>
+          <line class="arm arm-r" x1="0" y1="-20" x2="10" y2="-9" stroke="#fff" stroke-width="2.1"/>
+          <line class="leg leg-l" x1="0" y1="-6" x2="-8" y2="0" stroke="#fff" stroke-width="2.3"/>
+          <line class="leg leg-r" x1="0" y1="-6" x2="8" y2="0" stroke="#fff" stroke-width="2.3"/>
+        </g>
+      </g></g>
+    </svg>
+  </div>
+  <div class="splash-stage">
+    <div class="splash-logo">康</div>
+    <h1 class="splash-title">康复特教产品库</h1>
+    <div class="splash-line"></div>
+    <div class="splash-sub">REHAB · SPECIAL EDUCATION · PRODUCT LIBRARY</div>
+    <div class="splash-dots"><span></span><span></span><span></span></div>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">康</span>
+    <div class="brand-text">
+      <h1>康复特教产品库</h1>
+      <span class="sub">REHAB · SPECIAL EDUCATION</span>
+    </div>
+  </div>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" id="tab-home">首页看板</button>
+    <button class="nav-tab" id="tab-products">产品库</button>
+    <button class="nav-tab" id="tab-cart">购物车 <span id="cart-count" class="cart-badge">0</span></button>
+    <button class="nav-tab" id="tab-files">文件库</button>
+    <button class="nav-tab" id="tab-notes">备忘录 <span id="notes-badge" class="cart-badge" style="display:none">0</span></button>
+  </nav>
+</header>
+
+<main class="container">
+  <section id="view-home" class="view">
+    <div id="home-content"></div>
+  </section>
+
+  <section id="view-products" class="view" style="display:none">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn primary" id="btn-add">+ 新建产品</button>
+        <button class="btn ghost" id="btn-batch-cart">加入购物车</button>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn ghost" id="btn-import">导入 Excel</button>
+        <button class="btn ghost" id="btn-template">下载模板</button>
+        <button class="btn ghost" id="btn-export">导出 Excel</button>
+        <button class="btn ghost" id="btn-backup">备份数据库</button>
+      </div>
+    </div>
+
+    <section class="search-bar">
+      <input type="text" id="q" class="input" placeholder="搜索：名称 / 型号 / 参数 / 介绍…" />
+      <select id="f-category" class="select"><option value="">全部类型</option></select>
+      <select id="f-company" class="select"><option value="">全部公司</option></select>
+      <select id="f-tag" class="select"><option value="">全部标签</option></select>
+      <div class="price-group" title="按进货价或市场价设置金额区间筛选">
+        <div class="price-toggle" id="price-toggle">
+          <button type="button" class="pt-btn on" data-pf="channel">进货价</button>
+          <button type="button" class="pt-btn" data-pf="market">市场价</button>
+        </div>
+        <div class="price-range">
+          <input type="number" id="f-price-min" min="0" step="0.01" placeholder="最低">
+          <span class="dash">—</span>
+          <input type="number" id="f-price-max" min="0" step="0.01" placeholder="最高">
+        </div>
+      </div>
+      <select id="f-sort" class="select" title="排序方式（按上方切换的价格类型）">
+        <option value="">按序号</option>
+        <option value="price_asc">所选价格 低→高</option>
+        <option value="price_desc">所选价格 高→低</option>
+      </select>
+      <button class="btn primary" id="btn-search">搜索</button>
+      <button class="btn ghost" id="btn-reset">重置</button>
+    </section>
+
+    <section class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:36px"><input type="checkbox" id="product-select-all"></th>
+            <th style="width:56px">图片</th>
+            <th style="width:64px">序号</th>
+            <th>名称</th>
+            <th style="width:100px">型号</th>
+            <th style="width:110px">产品类型</th>
+            <th style="width:130px">公司</th>
+            <th style="width:88px">市场价</th>
+            <th style="width:88px">渠道价</th>
+            <th style="width:130px">标签</th>
+            <th style="width:150px">附件名称</th>
+            <th style="width:92px">导入时间</th>
+            <th style="width:130px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="empty" class="empty" style="display:none">暂无数据，点击「新建产品」添加第一条。</div>
+    </section>
+
+    <section class="pagination" id="pagination"></section>
+  </section>
+
+  <section id="view-cart" class="view" style="display:none">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn ghost" id="btn-cart-clear">清空当前项目</button>
+        <button class="btn ghost" id="btn-cart-reset">恢复原价</button>
+      </div>
+      <div class="toolbar-right">
+        <label class="select-all"><input type="checkbox" id="cart-select-all"> 全选</label>
+      </div>
+    </div>
+    <div class="folder-bar" id="cart-project-bar"></div>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:40px"></th>
+            <th style="width:64px">序号</th>
+            <th>名称</th>
+            <th style="width:110px">产品类型</th>
+            <th style="width:130px">市场价（可改）</th>
+            <th style="width:88px">渠道价</th>
+            <th style="width:90px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="cart-tbody"></tbody>
+      </table>
+      <div id="cart-empty" class="empty">当前项目是空的</div>
+    </div>
+  </section>
+
+  <section id="view-files" class="view" style="display:none">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn primary" id="btn-file-upload">上传文件</button>
+        <button class="btn ghost" id="btn-folder-new">新建文件夹</button>
+        <button class="btn ghost" id="btn-files-download">批量下载</button>
+        <button class="btn ghost" id="btn-files-move">移动到</button>
+      </div>
+      <div class="toolbar-right">
+        <input type="text" id="file-q" class="input" placeholder="搜索全部文件（跨文件夹）..." style="width:300px">
+        <button class="btn primary" id="btn-file-search">搜索</button>
+        <button class="btn ghost" id="btn-file-reset">重置</button>
+      </div>
+    </div>
+    <div class="folder-bar" id="folder-bar"></div>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:36px"><input type="checkbox" id="file-select-all"></th>
+            <th>文件名</th>
+            <th style="width:130px">文件夹</th>
+            <th style="width:100px">大小</th>
+            <th style="width:170px">上传时间</th>
+            <th style="width:170px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="files-tbody"></tbody>
+      </table>
+      <div id="files-empty" class="empty">暂无文件，点「上传文件」添加</div>
+    </div>
+  </section>
+
+  <!-- 备忘录（仅本机浏览器可见） -->
+  <section id="view-notes" class="view" style="display:none">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn primary" id="btn-note-new">+ 新建备忘</button>
+        <button class="btn ghost" id="btn-note-book-new">+ 新建备忘本</button>
+      </div>
+      <div class="toolbar-right">
+        <select id="note-filter" class="select" style="min-width:120px">
+          <option value="all">全部</option>
+          <option value="todo">未完成</option>
+          <option value="done">已完成</option>
+          <option value="today">今日到期</option>
+          <option value="overdue">已逾期</option>
+        </select>
+        <input type="text" id="note-q" class="input" placeholder="搜索备忘内容..." style="width:230px">
+        <button class="btn ghost" id="btn-note-export">导出备份</button>
+        <button class="btn ghost" id="btn-note-import">导入备份</button>
+      </div>
+    </div>
+    <div class="folder-bar" id="note-book-bar"></div>
+    <div id="notes-grid" class="notes-grid"></div>
+    <div id="notes-empty" class="empty" style="display:none">当前备忘本是空的，点「新建备忘」添加</div>
+    <p class="muted" style="font-size:12px;margin-top:14px">🔒 备忘录保存在本机浏览器中，仅自己可见，其他电脑登录此系统不会看到你的备忘内容。</p>
+    <input type="file" id="note-import-file" accept=".json" style="display:none">
+  </section>
+</main>
+
+  <!-- 底部固定统计栏（fixed 固定在窗口最底部，仅购物车页显示） -->
+  <div class="cart-summary-bar" id="cart-summary" style="display:none">
+    <div class="summary-stats">
+      <div class="sum-item">
+        <span class="sum-lbl">产品数量</span>
+        <span class="sum-val"><b id="sum-count">0</b> 个</span>
+      </div>
+      <div class="sum-divider"></div>
+      <div class="sum-item">
+        <span class="sum-lbl">市场价合计 <span class="sum-tip" title="统计当前项目全部产品；市场价可在上方表格直接修改，仅影响本项目，不改动产品库">?</span></span>
+        <span class="sum-val">¥ <b id="sum-market">0</b></span>
+      </div>
+      <div class="sum-divider"></div>
+      <div class="sum-item">
+        <span class="sum-lbl">渠道价合计</span>
+        <span class="sum-val channel">¥ <b id="sum-channel">0</b></span>
+      </div>
+      <div class="sum-divider"></div>
+      <div class="sum-item">
+        <span class="sum-lbl">统计范围</span>
+        <span class="sum-val scope"><span id="sum-scope">全部</span></span>
+      </div>
+    </div>
+    <div class="summary-actions">
+      <button class="btn primary" id="btn-cart-export">导出勾选（按类型分组）</button>
+    </div>
+  </div>
+
+<div id="overlay" class="overlay" style="display:none"></div>
+
+<div class="modal" id="modal-product" style="display:none">
+  <div class="modal-head">
+    <h2 id="modal-product-title">新建产品</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body" id="modal-product-body"></div>
+</div>
+
+<div class="modal" id="modal-detail" style="display:none">
+  <div class="modal-head">
+    <h2>产品详情</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body" id="modal-detail-body"></div>
+</div>
+
+<div class="modal" id="modal-img" style="display:none">
+  <div class="modal-head">
+    <h2>查看图片</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body" id="modal-img-body" style="text-align:center"></div>
+</div>
+
+<div class="modal" id="modal-input" style="display:none">
+  <div class="modal-head">
+    <h2 id="modal-input-title">输入</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body">
+    <input class="input" id="modal-input-value" style="width:100%">
+  </div>
+  <div class="modal-footer">
+    <button class="btn ghost" data-close>取消</button>
+    <button class="btn primary" id="modal-input-ok">确定</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-cart-add" style="display:none">
+  <div class="modal-head">
+    <h2>加入购物车</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body">
+    <p class="muted" id="cart-add-info" style="margin-bottom:14px"></p>
+    <div class="field" style="margin-bottom:14px">
+      <label>选择项目</label>
+      <select class="select" id="cart-project-select" style="width:100%"></select>
+    </div>
+    <div class="field">
+      <label>或输入新项目名称</label>
+      <input class="input" id="cart-new-project" style="width:100%" placeholder="留空则加入上方所选项目">
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn ghost" data-close>取消</button>
+    <button class="btn primary" id="btn-cart-add-ok">加入</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-upload" style="display:none">
+  <div class="modal-head">
+    <h2>上传文件</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body">
+    <div class="field" style="margin-bottom:14px">
+      <label>上传到文件夹</label>
+      <select class="select" id="upload-folder" style="width:100%"></select>
+    </div>
+    <div class="upload-dropzone" id="upload-dropzone">
+      <div class="upload-icon">↑</div>
+      <p style="font-size:15px;font-weight:500">拖拽文件到这里上传</p>
+      <p class="muted" style="margin-top:4px">或点击此区域，从本地文件夹选择文件</p>
+    </div>
+    <div class="upload-progress-wrap" id="upload-progress-wrap" style="display:none">
+      <div class="upload-progress-info" id="upload-progress-info"></div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+  <input type="file" id="upload-file-input" multiple style="display:none">
+</div>
+
+<div class="modal" id="modal-note" style="display:none">
+  <div class="modal-head">
+    <h2 id="modal-note-title">新建备忘</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body">
+    <div class="field" style="margin-bottom:12px">
+      <label class="req">内容</label>
+      <textarea class="textarea" id="note-text" style="min-height:110px" placeholder="记录事项..."></textarea>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>备忘本</label>
+        <select class="select" id="note-book"></select>
+      </div>
+      <div class="field">
+        <label>优先级</label>
+        <select class="select" id="note-priority">
+          <option value="normal">普通</option>
+          <option value="high">重要</option>
+          <option value="urgent">紧急</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>截止日期（可选）</label>
+        <input type="date" class="input" id="note-due">
+      </div>
+      <div class="field">
+        <label>提醒时间（可选）</label>
+        <input type="time" class="input" id="note-remind">
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn ghost" data-close>取消</button>
+    <button class="btn primary" id="btn-note-save">保存</button>
+  </div>
+</div>
+
+<input type="file" id="file-import" accept=".xlsx" style="display:none">
+
+<script src="app.js?v=2026090219"></script>
+</body>
+</html>
