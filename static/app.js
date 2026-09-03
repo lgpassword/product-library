@@ -100,6 +100,7 @@ function switchView(name) {
   if (name === "cart") renderCart();
   if (name === "files") { loadFolders(); loadFiles(); }
   if (name === "notes") renderNotes();
+  updateSelFloat();
 }
 
 function gotoSourceFile(fid, fname) {
@@ -1021,6 +1022,7 @@ function renderTable(items) {
   if (selAll) {
     selAll.checked = items.length > 0 && items.every((p) => productSelected.has(p.id));
   }
+  updateSelFloat();
 }
 
 function renderPagination() {
@@ -1396,6 +1398,7 @@ document.addEventListener("change", (e) => {
   } else if (e.target.classList && e.target.classList.contains("product-check")) {
     const id = Number(e.target.dataset.id);
     e.target.checked ? productSelected.add(id) : productSelected.delete(id);
+    updateSelFloat();
   } else if (e.target.classList && e.target.classList.contains("file-check")) {
     const id = Number(e.target.dataset.id);
     e.target.checked ? fileSelected.add(id) : fileSelected.delete(id);
@@ -1414,6 +1417,7 @@ document.addEventListener("change", (e) => {
       const id = Number(c.dataset.id);
       e.target.checked ? productSelected.add(id) : productSelected.delete(id);
     });
+    updateSelFloat();
   } else if (e.target.id === "file-select-all") {
     const checks = $$(".file-check");
     checks.forEach((c) => {
@@ -1535,6 +1539,36 @@ $("#btn-batch-cart").onclick = () => {
   const ids = [...productSelected];
   if (!ids.length) { alert("请先勾选产品（列表左侧勾选框）"); return; }
   openCartAddModal(ids);
+};
+
+// ---------- 产品勾选浮动操作条(固定底部,不随页面滚动) ----------
+function updateSelFloat() {
+  const box = document.getElementById("sel-float");
+  const n = document.getElementById("sel-float-n");
+  if (!box) return;
+  const inProducts = document.getElementById("view-products")?.style.display !== "none";
+  const cnt = productSelected.size;
+  if (cnt > 0 && inProducts) {
+    box.style.display = "flex";
+    if (n) n.textContent = String(cnt);
+  } else {
+    box.style.display = "none";
+  }
+}
+
+const floatCart = document.getElementById("btn-float-cart");
+if (floatCart) floatCart.onclick = () => {
+  const ids = [...productSelected];
+  if (!ids.length) { alert("请先勾选产品"); return; }
+  openCartAddModal(ids);
+};
+const floatClear = document.getElementById("btn-float-clear");
+if (floatClear) floatClear.onclick = () => {
+  productSelected.clear();
+  document.querySelectorAll(".product-check").forEach((c) => (c.checked = false));
+  const all = document.getElementById("product-select-all");
+  if (all) all.checked = false;
+  updateSelFloat();
 };
 
 $("#btn-add").onclick = () => openProductModal(null);

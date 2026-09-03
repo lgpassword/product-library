@@ -175,6 +175,7 @@
     </section>
 
     <section class="pagination" id="pagination"></section>
+
   </section>
 
   <section id="view-cart" class="view" style="display:none">
@@ -440,6 +441,14 @@
 
 <!-- AI 助手:浮动工具栏 -->
 <div id="btn-top" title="回到顶部" style="display:none">↑</div>
+    <!-- 产品勾选浮动操作条(固定,不随滚动) -->
+    <div id="sel-float" class="sel-float" style="display:none">
+      <span class="sel-count">已选 <b id="sel-float-n">0</b> 项</span>
+      <div class="sel-float-actions">
+        <button class="btn primary" id="btn-float-cart">🛒 加入购物车</button>
+        <button class="btn ghost" id="btn-float-clear">取消勾选</button>
+      </div>
+    </div>
 <div id="ai-fab" title="AI 助手">
   <span class="fab-icon">🤖</span>
   <span class="fab-dot" id="ai-fab-dot" style="display:none"></span>

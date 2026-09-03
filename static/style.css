@@ -982,3 +982,12 @@ body::after {
 .com-chip:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(15,23,42,.1)}
 @media(max-width:1100px){.home-cols{grid-template-columns:1fr}.hot-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:640px){.hot-grid{grid-template-columns:repeat(2,1fr)}.hero-banner{padding:24px}.hero-badge{display:none}}
+
+/* ===== 产品勾选浮动操作条 ===== */
+.sel-float{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;background:rgba(17,24,39,.92);backdrop-filter:blur(6px);color:#fff;border-radius:999px;padding:10px 18px 10px 22px;box-shadow:0 10px 30px rgba(0,0,0,.28);z-index:9000;animation:selIn .25s ease}
+@keyframes selIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.sel-count{font-size:14px;white-space:nowrap}
+.sel-count b{color:#ffd76a;font-size:16px}
+.sel-float-actions{display:flex;gap:8px}
+.sel-float .btn{padding:7px 16px;border-radius:999px;font-size:13.5px}
+@media(max-width:640px){.sel-float{width:92%;justify-content:space-between;gap:8px;padding:10px 14px}}
