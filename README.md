@@ -74,7 +74,10 @@ product-library/
 ├── screenshots/                 # README 引用截图
 │   ├── 01_dashboard.png
 │   ├── 02_product_list.png
-│   └── 03_library.png
+│   ├── 03_library.png
+│   ├── 04_ai_config.png         # AI 助手·配置
+│   ├── 05_ai_help.png           # AI 助手·使用说明
+│   └── 06_ai_import.png         # AI 助手·上传分析
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -185,6 +188,10 @@ Windows 下查看本机 IP：`ipconfig`；macOS / Linux：`ifconfig` 或 `ip add
 2. **上传分析**：点击或将 **xlsx / docx / pdf / txt / csv** 文件拖入面板（≤30MB）
 3. **确认入库**：AI 自动识别每个产品的名称 / 型号 / 产品类型 / 标签 / 厂商 / 简介 / 参数 / 价格；
    "拿捏不准"的条目**逐个弹窗**人工核对（上一个 / 下一个 / 跳过），点"保存此产品"写入产品库
+
+| AI 配置 | 使用说明 | 上传分析 |
+| --- | --- | --- |
+| ![AI配置](screenshots/04_ai_config.png) | ![使用说明](screenshots/05_ai_help.png) | ![上传分析](screenshots/06_ai_import.png) |
 
 > 识别结果若与库内已有产品重名（同型号）会自动跳过，不会重复入库。AI 分析完全可选，不配置 Key 不影响其它功能。
 
