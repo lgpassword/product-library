@@ -164,6 +164,7 @@
             <th style="width:88px">渠道价</th>
             <th style="width:130px">标签</th>
             <th style="width:150px">附件名称</th>
+            <th style="width:150px">来源文件</th>
             <th style="width:92px">导入时间</th>
             <th style="width:130px">操作</th>
           </tr>
@@ -312,6 +313,22 @@
   </div>
   <div class="modal-body" id="modal-detail-body"></div>
 </div>
+
+<div class="modal wide" id="modal-file-preview" style="display:none">
+  <div class="modal-head">
+    <h2>文件预览</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div id="file-preview-note" style="display:none;position:absolute;top:48px;left:0;right:0;z-index:5;background:#fff7ed;color:#9a3412;font-size:12px;padding:6px 14px;border-bottom:1px solid #fed7aa;cursor:pointer" title="点击关闭提示"></div>
+  <div class="modal-body" id="file-preview-body" style="padding:0;background:#fff;position:relative;height:78vh">
+    <div id="file-preview-status" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#6b7280;font-size:14px;background:#fff;z-index:2">
+      <div class="spinner" style="width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin 1s linear infinite"></div>
+      <div id="file-preview-status-text">正在准备预览...</div>
+    </div>
+    <iframe id="file-preview-frame" sandbox="allow-same-origin allow-scripts allow-popups allow-forms" style="width:100%;height:100%;border:0;display:none"></iframe>
+  </div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
 <div class="modal" id="modal-img" style="display:none">
   <div class="modal-head">

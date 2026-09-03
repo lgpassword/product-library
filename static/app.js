@@ -102,6 +102,31 @@ function switchView(name) {
   if (name === "notes") renderNotes();
 }
 
+function gotoSourceFile(fid, fname) {
+  closeModal();
+  // 重置为“全部”文件夹并清空搜索,避免被当前文件夹过滤掉
+  currentFolder = "__all__";
+  fileSearch = "";
+  switchView("files");
+  setTimeout(() => {
+    const q = $("#file-q");
+    if (q) q.value = fname || "";
+    const btn = $("#btn-file-search");
+    if (btn) btn.click();
+    setTimeout(() => {
+      const rows = document.querySelectorAll("#files-tbody tr");
+      for (const r of rows) {
+        if (fname && (r.textContent || "").includes(fname.slice(0, 15))) {
+          r.style.background = "rgba(37,99,235,.16)";
+          r.scrollIntoView({ block: "center" });
+          setTimeout(() => { r.style.background = ""; }, 2800);
+          break;
+        }
+      }
+    }, 700);
+  }, 300);
+}
+
 // ---------- 购物车 ----------
 
 function saveCart() {
@@ -464,6 +489,7 @@ function renderFiles(files) {
       <td class="muted">${fmtSize(f.size)}</td>
       <td class="muted">${f.created_at || "—"}</td>
       <td><div class="row-actions">
+        <a class="link" data-file-preview="${f.id}">预览</a>
         <a class="link" href="/api/files/${f.id}/download" target="_blank">下载</a>
         <a class="link" style="color:var(--danger)" data-file-del="${f.id}">删除</a>
       </div></td>
@@ -471,6 +497,84 @@ function renderFiles(files) {
   const selAll = $("#file-select-all");
   if (selAll) {
     selAll.checked = files.length > 0 && files.every((f) => fileSelected.has(f.id));
+  }
+}
+
+function _previewShowStatus(text, isError) {
+  const s = $("#file-preview-status");
+  const t = $("#file-preview-status-text");
+  const f = $("#file-preview-frame");
+  if (f) f.style.display = "none";
+  if (s) s.style.display = "flex";
+  if (t) {
+    const spin = s.querySelector(".spinner");
+    if (isError) {
+      if (spin) spin.style.display = "none";
+      t.innerHTML = "⚠️ " + text + "<br><br><span style='color:#9ca3af;font-size:12px'>可关闭弹窗后重新点击预览,或点下方按钮下载原文件</span>";
+    } else {
+      if (spin) spin.style.display = "";
+      t.textContent = text;
+    }
+  }
+}
+function _previewShowFrame(url) {
+  const s = $("#file-preview-status");
+  const f = $("#file-preview-frame");
+  if (s) s.style.display = "none";
+  if (f) {
+    f.onload = null;
+    f.src = url;
+    f.style.display = "block";
+  }
+}
+function _previewShowNote(text) {
+  const n = $("#file-preview-note");
+  if (!n) return;
+  if (!text) { n.style.display = "none"; return; }
+  n.textContent = "ℹ️ " + text;
+  n.style.display = "block";
+  n.onclick = () => { n.style.display = "none"; };
+}
+async function openFilePreview(fid) {
+  openModal("#modal-file-preview");
+  _previewShowNote(null);
+  _previewShowStatus("正在提交预览任务...");
+  try {
+    const r = await fetch("/api/files/" + fid + "/preview/async", { method: "POST" });
+    if (!r.ok) {
+      let m = "预览服务异常 (" + r.status + ")";
+      try { m = (await r.json()).detail || m; } catch (e) {}
+      _previewShowStatus(m, true);
+      return;
+    }
+    const data = await r.json();
+    if (data.note) _previewShowNote(data.note);
+    if (data.url && data.status === "done") {
+      _previewShowFrame(data.url);
+      return;
+    }
+    const tid = data.task_id;
+    let elapsed = 0;
+    for (let i = 0; i < 240; i++) {  // 最多轮询 240 次 ≈ 6 分钟
+      await new Promise(rs => setTimeout(rs, 1500));
+      elapsed += 1.5;
+      const r2 = await fetch("/api/preview/tasks/" + tid);
+      const st = await r2.json();
+      if (st.note) _previewShowNote(st.note);
+      if (st.status === "done" && st.url) {
+        _previewShowFrame(st.url);
+        return;
+      }
+      if (st.status === "failed") {
+        _previewShowStatus("预览生成失败: " + (st.error || "未知错误"), true);
+        return;
+      }
+      const sizeMb = (data.size / 1048576).toFixed(1);
+      _previewShowStatus("正在生成预览... 已用时 " + elapsed.toFixed(0) + "s (文件大小 " + sizeMb + " MB)");
+    }
+    _previewShowStatus("预览生成超时,请改用下载查看原文件", true);
+  } catch (e) {
+    _previewShowStatus("网络错误: " + (e.message || e), true);
   }
 }
 
@@ -794,6 +898,9 @@ function renderTable(items) {
       `<a class="link" href="/api/attachments/${f.id}/download" target="_blank" title="${esc(f.filename)}">${esc(f.filename)}</a>`
     ).join("");
     const time = (p.created_at || "").slice(0, 10);
+    const src = p.source_file_id
+      ? `<a class="link src-file-link" data-src-file="${p.source_file_id}" data-src-name="${esc(p.source_filename || "")}" title="来源文件:${esc(p.source_filename || "")}">${esc((p.source_filename || "").length > 18 ? (p.source_filename || "").slice(0, 17) + "…" : p.source_filename || "")}</a>`
+      : '<span class="muted">—</span>';
     return `<tr>
       <td><input type="checkbox" class="product-check" data-id="${p.id}" ${productSelected.has(p.id) ? "checked" : ""}></td>
       <td>${img}</td>
@@ -806,6 +913,7 @@ function renderTable(items) {
       <td class="price">${fmtPrice(p.channel_price)}</td>
       <td>${tags || '<span class="muted">—</span>'}</td>
       <td><div class="file-names">${files || "—"}</div></td>
+      <td>${src}</td>
       <td class="time-cell">${time}</td>
       <td><div class="row-actions">
         <a class="link" data-act="view" data-id="${p.id}">查看</a>
@@ -1095,6 +1203,7 @@ async function openDetail(id) {
       <div class="detail-item full"><div class="k">参数</div><div class="v" style="white-space:pre-wrap">${esc(p.params || "—")}</div></div>
       <div class="detail-item full"><div class="k">图片</div>${gallery}</div>
       <div class="detail-item full"><div class="k">附件</div><div class="attach-list">${fileList}</div></div>
+      ${p.source_file_id ? `<div class="detail-item"><div class="k">来源文件</div><div class="v"><a class="link" data-src-file="${p.source_file_id}" data-src-name="${esc(p.source_filename || '')}">${esc(p.source_filename || '查看文件')}</a> <span class="muted" style="font-size:12px">(点击跳转文件库)</span></div></div>` : ''}
       <div class="detail-item"><div class="k">导入时间</div><div class="v muted">${p.created_at || "—"}</div></div>
       <div class="detail-item"><div class="k">更新时间</div><div class="v muted">${p.updated_at || "—"}</div></div>
     </div>`;
@@ -1132,6 +1241,16 @@ document.addEventListener("click", async (e) => {
   const rmEl = e.target.closest("[data-cart-remove]");
   if (rmEl) {
     removeFromCart(Number(rmEl.dataset.cartRemove));
+    return;
+  }
+  const srcEl = e.target.closest("[data-src-file]");
+  if (srcEl) {
+    gotoSourceFile(Number(srcEl.dataset.srcFile), srcEl.dataset.srcName || "");
+    return;
+  }
+  const fpEl = e.target.closest("[data-file-preview]");
+  if (fpEl) {
+    openFilePreview(Number(fpEl.dataset.filePreview));
     return;
   }
   const fdEl = e.target.closest("[data-file-del]");

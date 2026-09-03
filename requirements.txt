@@ -2,3 +2,6 @@ fastapi
 uvicorn
 python-multipart
 openpyxl
+python-docx
+python-pptx
+pywin32

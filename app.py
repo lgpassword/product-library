@@ -5,7 +5,7 @@ import uuid
 import zipfile
 from datetime import datetime
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import quote
@@ -210,10 +210,12 @@ def list_products(
     ).fetchone()[0]
 
     sql = f"""
-        SELECT p.*, c.name AS category_name, co.name AS company_name
+        SELECT p.*, c.name AS category_name, co.name AS company_name,
+               f.filename AS source_filename
         FROM product p
         LEFT JOIN category c ON p.category_id=c.id
         LEFT JOIN company co ON p.company_id=co.id
+        LEFT JOIN file f ON p.source_file_id=f.id
         {where_sql}
         {order}
         LIMIT ? OFFSET ?
@@ -255,9 +257,11 @@ def list_products(
 def get_product(pid: int):
     conn = get_conn()
     p = conn.execute(
-        "SELECT p.*, c.name AS category_name, co.name AS company_name "
+        "SELECT p.*, c.name AS category_name, co.name AS company_name, "
+        "f.filename AS source_filename "
         "FROM product p LEFT JOIN category c ON p.category_id=c.id "
-        "LEFT JOIN company co ON p.company_id=co.id WHERE p.id=?", (pid,)
+        "LEFT JOIN company co ON p.company_id=co.id "
+        "LEFT JOIN file f ON p.source_file_id=f.id WHERE p.id=?", (pid,)
     ).fetchone()
     result = product_full(conn, p)
     conn.close()
@@ -556,13 +560,449 @@ def delete_file(fid: int):
                 os.remove(path)
             except OSError:
                 pass
+        conn.execute("UPDATE product SET source_file_id=NULL WHERE source_file_id=?", (fid,))
         conn.execute("DELETE FROM file WHERE id=?", (fid,))
         conn.commit()
     conn.close()
     return {"ok": True}
 
 
-@app.post("/api/files/batch-download")
+# ---------- 文件库在线预览 ----------
+
+from html import escape as _esc
+import csv as _csv
+import io as _io
+
+# 浏览器原生可预览(图片 / 音视频 / PDF):直接以 inline 形式返回
+_PREVIEW_NATIVE = {
+    ".pdf": "application/pdf",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".svg": "image/svg+xml", ".ico": "image/x-icon",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4", ".aac": "audio/aac", ".flac": "audio/flac",
+}
+# 纯文本直显
+_PREVIEW_TEXT = {
+    ".txt", ".md", ".markdown", ".log", ".json", ".xml",
+    ".ini", ".cfg", ".yaml", ".yml", ".py", ".js", ".css", ".html", ".htm",
+}
+# 表格(Excel / CSV)
+_PREVIEW_TABLE = {".xlsx", ".xlsm", ".xls", ".csv"}
+# Word / PPT
+_PREVIEW_DOCX = {".docx"}
+_PREVIEW_PPTX = {".pptx"}
+# Office 原生文档:可调用本机 Office/WPS COM 保真转 PDF
+_PREVIEW_OFFICE = {".docx", ".doc", ".xlsx", ".xlsm", ".xls", ".pptx", ".ppt"}
+
+
+def _read_text_smart(path, limit=8 * 1024 * 1024):
+    with open(path, "rb") as fh:
+        raw = fh.read(limit)
+    for enc in ("utf-8", "gb18030", "utf-16", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _page_head(title):
+    return ("<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>"
+            "<title>文件预览</title><style>"
+            "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:0;background:#fff;color:#1f2937}"
+            ".top{position:sticky;top:0;background:#f9fafb;border-bottom:1px solid #e5e7eb;padding:10px 18px;font-size:14px;color:#374151;display:flex;align-items:center;gap:8px}"
+            ".top b{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}"
+            ".body{padding:18px;overflow:auto}"
+            "pre.txt{white-space:pre-wrap;word-break:break-all;font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.7;margin:0}"
+            "table{border-collapse:collapse;width:100%;font-size:13px;margin-bottom:20px;background:#fff}"
+            "th,td{border:1px solid #d1d5db;padding:6px 10px;text-align:left;word-break:break-all}"
+            "th{background:#f3f4f6;font-weight:600;position:sticky;top:41px}"
+            "td.num,th.num{text-align:right}"
+            ".sheet-tab{display:inline-block;padding:6px 14px;margin:4px 6px 4px 0;border:1px solid #d1d5db;border-radius:16px;cursor:pointer;font-size:13px;color:#374151;background:#fff}"
+            ".sheet-tab.on{background:#2563eb;color:#fff;border-color:#2563eb}"
+            ".sheet-panel{display:none}.sheet-panel.on{display:block}"
+            ".hint{color:#6b7280;font-size:13px;padding:30px;text-align:center}"
+            ".p,.doc-p{white-space:pre-wrap;word-break:break-word;margin:0 0 10px;line-height:1.75;font-size:14px}"
+            "h1.dl{font-size:17px;margin:4px 0 14px;color:#111827}"
+            ".slide-card{border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin-bottom:14px;background:#fcfcfd}"
+            ".slide-no{color:#6b7280;font-size:12px;margin-bottom:8px}"
+            "</style></head><body>"
+            f"<div class='top'>📄 在线预览 · <b>{_esc(title)}</b>"
+            "&nbsp;<a style='color:#2563eb;text-decoration:none;margin-left:auto' href='#' onclick='window.close();return false'>关闭窗口</a></div>")
+
+
+def _page_end():
+    return "</body></html>"
+
+
+# ---------- 异步预览任务框架 ----------
+
+PREVIEW_DIR = os.path.join(BASE_DIR, "uploads", "preview")
+os.makedirs(PREVIEW_DIR, exist_ok=True)
+PREVIEW_THRESHOLD = 30 * 1024 * 1024  # 30MB,超过则后台异步生成
+
+_preview_tasks = {}  # task_id -> dict(status, fid, filename, started, finished, error, size, result_path)
+
+
+def _new_task(fid, filename):
+    tid = uuid.uuid4().hex
+    _preview_tasks[tid] = {
+        "status": "queued",
+        "fid": fid,
+        "filename": filename,
+        "started": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "finished": None,
+        "error": None,
+        "size": 0,
+        "result_path": None,
+    }
+    return tid
+
+
+def _task_view(tid):
+    d = _preview_tasks.get(tid)
+    if not d:
+        return {"status": "not_found", "error": "任务不存在或已过期"}
+    v = {"status": d["status"], "filename": d["filename"], "error": d["error"],
+         "note": d.get("note")}
+    if d["status"] == "done":
+        v["url"] = f"/api/preview/result/{tid}"
+        v["kind"] = "pdf" if (d.get("result_path") or "").lower().endswith(".pdf") else "html"
+    return v
+
+
+def _render_friendly_html(name, message, fid=None, status=None):
+    body = (f"<div class='hint'>⚠️ {_esc(message)}<br>"
+           f"<div style='margin-top:14px;color:#6b7280;font-size:13px'>文件: <b>{_esc(name or '')}</b></div>")
+    if fid is not None:
+        body += (f"<div style='margin-top:18px'><a href='/api/files/{fid}/download' "
+                 f"style='color:#2563eb;text-decoration:none;font-size:14px'>⬇ 下载原文件</a></div>")
+    body += "</div>"
+    return _page_head(f"无法预览 · {name or ''}") + body + _page_end()
+
+
+def _render_preview_html(path, ext, filename):
+    """按扩展名分发到对应 HTML 渲染器(集成原表格/docx/pptx/文本)。"""
+    if ext in _PREVIEW_TABLE:
+        return _build_table_html(path, ext, filename)
+    if ext in _PREVIEW_DOCX:
+        return _build_docx_html(path, filename)
+    if ext in _PREVIEW_PPTX:
+        return _build_pptx_html(path, filename)
+    if ext in _PREVIEW_TEXT:
+        text = _read_text_smart(path)
+        body = f"<pre class='txt'>{_esc(text)}</pre>"
+        return _page_head(filename) + "<div class='body'>" + body + "</div>" + _page_end()
+    return None
+
+
+OFFICE_CONVERT_TIMEOUT = 180  # Office 转换最长等待(秒),超时视为失败并终止进程
+
+
+def _convert_office_to_pdf(src, dst, ext):
+    """以子进程方式调用本机 Office / WPS COM 保真转 PDF。
+
+    好处:COM 卡死/超时只影响子进程,可被主服务强制终止,不会拖死预览服务线程。
+    """
+    cli = os.path.join(BASE_DIR, "office_convert_cli.py")
+    py = sys.executable
+    import subprocess as _sp
+    proc = None
+    try:
+        proc = _sp.Popen(
+            [py, cli, src, dst, ext],
+            stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, encoding="utf-8", errors="replace",
+        )
+        try:
+            out, _ = proc.communicate(timeout=OFFICE_CONVERT_TIMEOUT)
+        except _sp.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.communicate(timeout=5)
+            except Exception:
+                pass
+            raise RuntimeError(f"Office 转换超时(>{OFFICE_CONVERT_TIMEOUT}s),文件过大或电脑性能不足")
+        if proc.returncode != 0 or not (os.path.exists(dst) and os.path.getsize(dst) > 1000):
+            raise RuntimeError((out or "").strip()[-200:] or f"Office 转换失败(exit={proc.returncode})")
+    finally:
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
+def _run_preview_task(tid, path, ext, name):
+    t = _preview_tasks[tid]
+    t["status"] = "running"
+    t["converting"] = ext in _PREVIEW_OFFICE
+    out_stem = os.path.join(PREVIEW_DIR, tid)
+    try:
+        if ext in _PREVIEW_OFFICE:
+            # 保真路线:本机 Office/WPS 转 PDF
+            try:
+                _convert_office_to_pdf(path, out_stem + ".pdf", ext)
+                t["result_path"] = out_stem + ".pdf"
+                t["status"] = "done"
+                t["converted_as"] = "pdf"
+                t["note"] = None
+            except Exception as conv_e:
+                # COM 转换失败(未装 Office / 文件损坏 / 超大超时等)→ 尝试降级为提取式预览
+                try:
+                    html = _render_preview_html(path, ext, name)
+                    if html is None:
+                        raise RuntimeError("fallback_none")
+                    with open(out_stem + ".html", "w", encoding="utf-8") as f:
+                        f.write(html)
+                    t["result_path"] = out_stem + ".html"
+                    t["status"] = "done"
+                    t["converted_as"] = "html"
+                    t["note"] = f"本机保真转换未成功(原因:{str(conv_e)[:80]}),已切换为文本预览"
+                except Exception:
+                    # 连提取式也不支持该类型时,如实报告转换原因,避免误导为"不支持预览"
+                    t["status"] = "failed"
+                    t["error"] = f"保真转换失败:{str(conv_e)[:120]}。请下载原文件,用本机 Office/WPS 打开查看"
+        else:
+            html = _render_preview_html(path, ext, name)
+            if html is None:
+                raise RuntimeError("暂不支持此类型的在线预览")
+            with open(out_stem + ".html", "w", encoding="utf-8") as f:
+                f.write(html)
+            t["result_path"] = out_stem + ".html"
+            t["status"] = "done"
+    except Exception as e:
+        t["status"] = "failed"
+        t["error"] = str(e)
+    finally:
+        t["finished"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+@app.get("/api/files/{fid}/preview")
+def preview_file(fid: int):
+    """兼容旧接口:文件不存在/类型不支持时返回友好 HTML(不再让 iframe 出 localhost 拒绝连接)。"""
+    conn = get_conn()
+    f = conn.execute("SELECT * FROM file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    name = f["filename"] if f else ""
+    if f is None:
+        return Response(content=_render_friendly_html(name, "该文件不存在或已被删除", fid=None),
+                        media_type="text/html; charset=utf-8", status_code=404)
+    path = os.path.join(LIBRARY_DIR, f["stored_name"])
+    if not os.path.exists(path):
+        return Response(content=_render_friendly_html(name, "文件已丢失,请重新上传", fid=fid),
+                        media_type="text/html; charset=utf-8", status_code=404)
+    ext = os.path.splitext(f["filename"])[1].lower()
+    if ext in _PREVIEW_NATIVE:
+        return FileResponse(
+            path, media_type=_PREVIEW_NATIVE[ext],
+            headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(f['filename'])}"},
+        )
+    try:
+        html = _render_preview_html(path, ext, f["filename"])
+        if html is None:
+            return Response(content=_render_friendly_html(f["filename"], "暂不支持此文件类型的在线预览,请下载后查看", fid=fid),
+                            media_type="text/html; charset=utf-8", status_code=415)
+        return Response(content=html, media_type="text/html; charset=utf-8")
+    except Exception as e:
+        return Response(content=_render_friendly_html(f["filename"], f"解析失败: {e}", fid=fid),
+                        media_type="text/html; charset=utf-8", status_code=500)
+
+
+# 原生类型 inline 预览(给 PDF / 图片 / 音视频 用;浏览器原生渲染)
+@app.get("/api/files/{fid}/inline")
+def preview_inline(fid: int):
+    conn = get_conn()
+    f = conn.execute("SELECT * FROM file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    if f is None:
+        raise HTTPException(404, "文件不存在")
+    path = os.path.join(LIBRARY_DIR, f["stored_name"])
+    if not os.path.exists(path):
+        raise HTTPException(404, "文件已丢失")
+    ext = os.path.splitext(f["filename"])[1].lower()
+    if ext not in _PREVIEW_NATIVE:
+        raise HTTPException(400, "此类型不支持 inline 预览")
+    return FileResponse(
+        path, media_type=_PREVIEW_NATIVE[ext],
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(f['filename'])}"},
+    )
+
+
+# 异步预览任务(大文件后台生成,前端轮询状态)
+@app.post("/api/files/{fid}/preview/async")
+def preview_async(fid: int, bg: BackgroundTasks):
+    conn = get_conn()
+    f = conn.execute("SELECT * FROM file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    if f is None:
+        raise HTTPException(404, "文件不存在")
+    ext = os.path.splitext(f["filename"])[1].lower()
+    size = os.path.getsize(os.path.join(LIBRARY_DIR, f["stored_name"])) if os.path.exists(os.path.join(LIBRARY_DIR, f["stored_name"])) else 0
+    # 原生类型(PDF/图片/音视频)浏览器直接展示,无需异步
+    if ext in _PREVIEW_NATIVE:
+        if not os.path.exists(os.path.join(LIBRARY_DIR, f["stored_name"])):
+            raise HTTPException(404, "文件已丢失")
+        return {"task_id": "native", "status": "done",
+                "url": f"/api/files/{fid}/inline",
+                "filename": f["filename"], "size": size}
+    if not os.path.exists(os.path.join(LIBRARY_DIR, f["stored_name"])):
+        raise HTTPException(404, "文件已丢失")
+    tid = _new_task(fid, f["filename"])
+    _preview_tasks[tid]["size"] = size
+    full_path = os.path.join(LIBRARY_DIR, f["stored_name"])
+    if ext in _PREVIEW_OFFICE:
+        # Office 保真转换(COM 需数秒~十几秒):一律后台执行,避免请求阻塞
+        bg.add_task(_run_preview_task, tid, full_path, ext, f["filename"])
+    elif size <= PREVIEW_THRESHOLD:
+        # 文本/表格类小文件:直接同步生成(几十毫秒即可完成)
+        _run_preview_task(tid, full_path, ext, f["filename"])
+    else:
+        bg.add_task(_run_preview_task, tid, full_path, ext, f["filename"])
+    v = _task_view(tid)
+    return {"task_id": tid, "status": v["status"],
+            "filename": f["filename"], "size": size,
+            "url": v.get("url"), "note": v.get("note")}
+
+
+@app.get("/api/preview/tasks/{tid}")
+def preview_task_status(tid: str):
+    return _task_view(tid)
+
+
+@app.get("/api/preview/result/{tid}")
+def preview_task_result(tid: str):
+    d = _preview_tasks.get(tid)
+    if not d or d["status"] != "done" or not d["result_path"]:
+        raise HTTPException(404, "预览尚未就绪")
+    rp = d["result_path"]
+    if rp.lower().endswith(".pdf"):
+        return FileResponse(
+            rp, media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(d['filename'] + '.pdf')}"},
+        )
+    return FileResponse(rp, media_type="text/html; charset=utf-8")
+
+
+def _fmt_cell(v):
+    if v is None:
+        return ""
+    if isinstance(v, float):
+        return ("%g" % v)
+    return str(v)
+
+
+def _rows_to_table_html(rows, sticky_header=True):
+    if not rows:
+        return "<p class='hint'>空表格</p>"
+    head = "".join(f"<th>{_esc(str(c))}</th>" for c in rows[0]) if rows[0] else ""
+    trs = []
+    for r in rows[1:]:
+        tds = "".join(f"<td>{_esc(_fmt_cell(c))}</td>" for c in r)
+        trs.append(f"<tr>{tds}</tr>")
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(trs)}</tbody></table>"
+
+
+def _build_table_html(path, ext, filename):
+    title = f"表格式文件 · {filename}"
+    try:
+        if ext == ".csv":
+            text = _read_text_smart(path)
+            try:
+                reader = list(_csv.reader(_io.StringIO(text)))
+            except Exception:
+                reader = [line.split(",") for line in text.splitlines() if line.strip()]
+            sheets = [("数据", reader)]
+        else:
+            from openpyxl import load_workbook
+            wb = load_workbook(path, data_only=True, read_only=True)
+            sheets = [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
+    except Exception as e:
+        return (_page_head(title)
+                + f"<div class='hint'>解析失败：{_esc(str(e))}（建议直接下载原文件）</div>" + _page_end())
+    if len(sheets) == 1:
+        tabs = ""
+        panels = "<div class='body'>" + _rows_to_table_html(sheets[0][1]) + "</div>"
+    else:
+        tabs = "".join(f"<span class='sheet-tab' data-i='{i}'>{_esc(name)}</span>" for i, (name, _) in enumerate(sheets))
+        panels = "".join(
+            f"<div class='sheet-panel' data-p='{i}'>" + _rows_to_table_html(rows) + "</div>"
+            for i, (_, rows) in enumerate(sheets))
+        tabs = ("<div style='padding:8px 16px 0;position:sticky;top:41px;background:#fff;z-index:2;border-bottom:1px solid #eee'>"
+                + tabs + "</div>")
+        tabs += ("<script>"
+                 "(function(){var a=document.querySelectorAll('.sheet-tab'),p=document.querySelectorAll('.sheet-panel');"
+                 "function on(i){a.forEach(function(x){x.classList.toggle('on',+x.dataset.i===i)});"
+                 "p.forEach(function(x){x.classList.toggle('on',+x.dataset.p===i)})}on(0);"
+                 "a.forEach(function(x){x.onclick=function(){on(+x.dataset.i)}})})();"
+                 "</script>")
+    return _page_head(title) + tabs + panels + _page_end()
+
+
+def _build_docx_html(path, filename):
+    title = f"Word 文档 · {filename}"
+    try:
+        import docx
+        from docx.table import Table as _DocxTable
+        from docx.text.paragraph import Paragraph as _DocxPara
+        from docx.oxml.ns import qn
+
+        d = docx.Document(path)
+        parts = []
+
+        def style_of(p):
+            try:
+                return (p.style.name or "") if p.style else ""
+            except Exception:
+                return ""
+
+        for child in d.element.body.iterchildren():
+            if child.tag == qn("w:p"):
+                p = _DocxPara(child, d)
+                txt = p.text.strip()
+                if txt:
+                    st = style_of(p)
+                    if "Heading" in st or "标题" in st:
+                        lvl = "".join(ch for ch in st if ch.isdigit()) or "1"
+                        parts.append(f"<h{min(int(lvl) + 1, 6) if lvl else 3} class='dl' style='margin-top:18px'>{_esc(txt)}</h{min(int(lvl) + 1, 6) if lvl else 3}>")
+                    else:
+                        parts.append(f"<p class='doc-p'>{_esc(txt)}</p>")
+            elif child.tag == qn("w:tbl"):
+                t = _DocxTable(child, d)
+                rows = [[cell.text.strip() for cell in r.cells] for r in t.rows]
+                if rows:
+                    parts.append(_rows_to_table_html(rows))
+        body = "".join(parts) if parts else "<div class='hint'>该文档没有可预览的正文内容</div>"
+    except Exception as e:
+        return (_page_head(title) + f"<div class='hint'>解析失败：{_esc(str(e))}（建议直接下载原文件查看）</div>" + _page_end())
+    return _page_head(title) + "<div class='body'>" + body + "</div>" + _page_end()
+
+
+def _build_pptx_html(path, filename):
+    title = f"PPT 演示文稿 · {filename}"
+    try:
+        from pptx import Presentation
+        prs = Presentation(path)
+        cards = []
+        for idx, slide in enumerate(prs.slides, start=1):
+            blocks = []
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    txt = "\n".join(p.text.strip() for p in shape.text_frame.paragraphs if p.text.strip())
+                    if txt:
+                        blocks.append(f"<p class='doc-p'>{_esc(txt)}</p>")
+                elif getattr(shape, "has_table", False):
+                    tbl = shape.table
+                    rows = [[c.text.strip() for c in row.cells] for row in tbl.rows]
+                    if rows:
+                        blocks.append(_rows_to_table_html(rows))
+            if blocks:
+                cards.append(f"<div class='slide-card'><div class='slide-no'>第 {idx} 页</div>{''.join(blocks)}</div>")
+        body = "".join(cards) if cards else "<div class='hint'>该演示文稿没有可预览的文字内容</div>"
+    except Exception as e:
+        return (_page_head(title) + f"<div class='hint'>解析失败：{_esc(str(e))}（建议直接下载原文件查看）</div>" + _page_end())
+    return _page_head(title) + "<div class='body'>" + body + "</div>" + _page_end()
 def batch_download(payload: dict):
     ids = payload.get("ids") or []
     if not ids:

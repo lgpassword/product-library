@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS product (
     channel_price REAL,
     category_id INTEGER,
     company_id INTEGER,
+    source_file_id INTEGER,
     contact_phone TEXT,
     contact_person TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime')),
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS folder (
 CREATE INDEX IF NOT EXISTS idx_product_category ON product(category_id);
 CREATE INDEX IF NOT EXISTS idx_product_company ON product(company_id);
 CREATE INDEX IF NOT EXISTS idx_product_name ON product(name);
+CREATE INDEX IF NOT EXISTS idx_product_source ON product(source_file_id);
 CREATE INDEX IF NOT EXISTS idx_attachment_product ON attachment(product_id);
 """
 
@@ -97,6 +99,11 @@ def get_conn():
 
 def init_db():
     conn = get_conn()
+    # 老库升级:先补列,再执行建表/建索引(索引引用新列时必须先有列)
+    pcols = [r[1] for r in conn.execute("PRAGMA table_info(product)").fetchall()]
+    if "source_file_id" not in pcols:
+        conn.execute("ALTER TABLE product ADD COLUMN source_file_id INTEGER")
+        conn.commit()
     conn.executescript(SCHEMA)
     cols = [r[1] for r in conn.execute("PRAGMA table_info(file)").fetchall()]
     if "folder" not in cols:

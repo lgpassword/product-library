@@ -24,3 +24,15 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# 生成的预览缓存
+uploads/preview/*
+
+# 启动日志
+autostart.log
+
+# 数据与真实附件
+data.db
+*.db
+uploads/images/*
+!uploads/images/.gitkeep
