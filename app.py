@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import json
 import uuid
 import zipfile
 from datetime import datetime
@@ -565,6 +566,202 @@ def delete_file(fid: int):
         conn.commit()
     conn.close()
     return {"ok": True}
+
+
+# ---------- AI 助手(浮动工具:配置 / 文件分析入库) ----------
+
+# ---- AI 配置读写(存 settings 表) ----
+def get_setting(key, default=None):
+    conn = get_conn()
+    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    conn.close()
+    return row["value"] if row else default
+
+
+def set_setting(key, value):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO settings(key, value, updated_at) VALUES(?,?,datetime('now','localtime')) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now','localtime')",
+        (key, value),
+    )
+    conn.commit()
+    conn.close()
+
+
+@app.get("/api/ai/config")
+def ai_config_get():
+    # 不回传完整 key,只回传是否已配置 + 脱敏
+    key = get_setting("ai_api_key", "")
+    return {
+        "configured": bool(key),
+        "key_masked": (key[:6] + "…" + key[-4:]) if key else "",
+        "base_url": get_setting("ai_base_url", "https://api.deepseek.com"),
+        "model": get_setting("ai_model", "deepseek-chat"),
+    }
+
+
+@app.post("/api/ai/config")
+def ai_config_set(payload: dict):
+    # 只允许更新非空;key 传空则保持不变(避免误清)
+    key = (payload.get("api_key") or "").strip()
+    base_url = (payload.get("base_url") or "").strip()
+    model = (payload.get("model") or "").strip()
+    if key:
+        set_setting("ai_api_key", key)
+    if base_url:
+        set_setting("ai_base_url", base_url)
+    if model:
+        set_setting("ai_model", model)
+    return {"ok": True}
+
+
+@app.post("/api/ai/test")
+def ai_test(payload: dict):
+    """测试连通:用已存或传入的 key 发一个最小请求。"""
+    import urllib.request
+    key = (payload.get("api_key") or "").strip() or get_setting("ai_api_key", "")
+    base_url = (payload.get("base_url") or "").strip() or get_setting("ai_base_url", "https://api.deepseek.com")
+    model = (payload.get("model") or "").strip() or get_setting("ai_model", "deepseek-chat")
+    if not key:
+        return {"ok": False, "error": "未配置 API Key"}
+    try:
+        url = base_url.rstrip("/") + "/chat/completions"
+        body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "你好,请回复:OK"}],
+            "max_tokens": 5,
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", "Bearer " + key)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return {"ok": True, "reply": (data.get("choices") or [{}])[0].get("message", {}).get("content", "")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:300]}
+
+
+# ---- 文件解析:把上传的 xlsx/docx/txt 提取成结构化文本(供 AI) ----
+def extract_doc_rows(data_bytes, filename):
+    """解析上传文档 → 返回候选行文本列表。"""
+    ext = os.path.splitext(filename)[1].lower()
+    rows = []
+    if ext == ".xlsx":
+        import io as _iom
+        wb = openpyxl.load_workbook(_iom.BytesIO(data_bytes), data_only=True, read_only=True)
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                vals = [("" if v is None else str(v).strip()) for v in row]
+                line = " | ".join(v for v in vals if v)
+                if line and len(line) > 1:
+                    rows.append(line)
+    elif ext in (".docx", ".doc"):
+        try:
+            import docx as _docx
+            from io import BytesIO as _Bio
+            d = _docx.Document(_Bio(data_bytes))
+            for p in d.paragraphs:
+                if p.text.strip():
+                    rows.append(p.text.strip())
+            for tb in d.tables:
+                for row in tb.rows:
+                    cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                    if cells:
+                        rows.append(" | ".join(cells))
+        except Exception:
+            rows.append(data_bytes.decode("utf-8", "ignore"))
+    else:  # txt/csv/json/md ...
+        try:
+            text = data_bytes.decode("utf-8", "ignore")
+        except Exception:
+            text = data_bytes.decode("gb18030", "ignore")
+        for ln in text.splitlines():
+            if ln.strip():
+                rows.append(ln.strip())
+    return rows
+
+
+@app.post("/api/ai/analyze")
+async def ai_analyze(file: UploadFile = File(...)):
+    """上传文件 → 提取文本 → 调 DeepSeek → 返回结构化产品候选(带置信度)。"""
+    key = get_setting("ai_api_key", "")
+    base_url = get_setting("ai_base_url", "https://api.deepseek.com")
+    model = get_setting("ai_model", "deepseek-chat")
+    if not key:
+        raise HTTPException(400, "请先在 AI 配置中填写 API Key")
+
+    data_bytes = await file.read()
+    filename = file.filename or "upload"
+    # 限制上传大小(30MB)
+    if len(data_bytes) > 30 * 1024 * 1024:
+        raise HTTPException(400, "文件过大(>30MB),请先拆分或压缩")
+
+    rows = extract_doc_rows(data_bytes, filename)
+    if not rows:
+        raise HTTPException(400, "未能从文件中解析出文本内容")
+    # 截取前 ~8000 字符(控制 token)
+    doc_text = "\n".join(rows)[:8000]
+
+    prompt = (
+        "你是康复特教/医疗器械产品资料整理助手。根据下面从产品清单文件中提取的文本,"
+        "识别其中的每一款产品,输出 JSON 数组,每项格式:\n"
+        "{\"name\":\"产品名称\",\"model\":\"型号(无则空)\",\"category\":\"产品类型(简短,如:心理沙盘设备/运动治疗类)\","
+        "\"tags\":[\"标签1\",\"标签2\"](2-4个,含品牌/适用方向),\"company\":\"生产厂商(文本中有则提取,无则空)\","
+        "\"intro\":\"一句话简介\",\"params\":\"主要参数要点(保留尺寸/配置等关键信息,≤200字)\",\"market_price\":数字,\"channel_price\":数字,\"confident\":true或false(是否拿捏不准)}\n"
+        "若某字段信息不足无法确定,confident 设 false;完全无法识别为产品的行忽略。只输出 JSON 数组,不要任何解释。\n\n文件文本:\n" + doc_text
+    )
+    try:
+        import urllib.request
+        url = base_url.rstrip("/") + "/chat/completions"
+        body = json.dumps({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "你是一个严谨的产品清单解析器,只输出 JSON。"},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 4000,
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", "Bearer " + key)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            rdata = json.loads(resp.read().decode("utf-8"))
+        content = (rdata.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        # 提取 JSON(可能被 ``` 包裹)
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.strip("`")
+            if content.startswith("json"):
+                content = content[4:]
+        m = re.search(r"\[[\s\S]*\]", content)
+        if not m:
+            raise RuntimeError("AI 返回未包含 JSON 数组")
+        items = json.loads(m.group(0))
+        # 规范化
+        out = []
+        for it in items:
+            if not it.get("name"):
+                continue
+            out.append({
+                "name": str(it.get("name", "")).strip()[:150],
+                "model": str(it.get("model", "") or "").strip()[:80],
+                "category": str(it.get("category", "") or "").strip()[:60],
+                "tags": [str(t).strip()[:30] for t in (it.get("tags") or []) if str(t).strip()][:5],
+                "company": str(it.get("company", "") or "").strip()[:80],
+                "intro": str(it.get("intro", "") or "").strip()[:500],
+                "params": str(it.get("params", "") or "").strip()[:1500],
+                "market_price": it.get("market_price"),
+                "channel_price": it.get("channel_price"),
+                "confident": bool(it.get("confident", False)),
+                "uncertain_fields": [],  # 前端逐个校验用
+            })
+        return {"ok": True, "items": out, "filename": filename}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, "AI 分析失败:" + str(e)[:300])
 
 
 # ---------- 文件库在线预览 ----------

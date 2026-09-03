@@ -1756,3 +1756,210 @@ function dismissSplash() {
   // 欢迎动画播完后淡出进入系统
   setTimeout(dismissSplash, 2900);
 })();
+
+// ================= AI 助手(浮动工具栏) =================
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const fab = document.getElementById("ai-fab");
+  const panel = document.getElementById("ai-panel");
+  if (!fab || !panel) return;
+
+  let aiItems = [];
+  let confirmQueue = [];
+  let confirmIdx = 0;
+  let curEditor = null;
+
+  $$(".ai-tab").forEach((t) => t.onclick = () => {
+    $$(".ai-tab").forEach((x) => x.classList.toggle("on", x === t));
+    $$(".ai-page").forEach((p) => p.style.display = (p.dataset.aipage === t.dataset.aitab) ? "block" : "none");
+  });
+  const xBtn = document.getElementById("ai-x");
+  if (xBtn) xBtn.onclick = () => panel.style.display = "none";
+  fab.onclick = () => {
+    const show = panel.style.display !== "block";
+    panel.style.display = show ? "flex" : "none";
+    if (show) loadAiCfg();
+  };
+
+  async function loadAiCfg() {
+    try {
+      const c = await api("/api/ai/config");
+      const keyInp = document.getElementById("ai-key");
+      if (c.key_masked) {
+        keyInp.placeholder = "已配置:" + c.key_masked + "(留空不修改)";
+        keyInp.value = "";
+      }
+      document.getElementById("ai-base").value = c.base_url || "https://api.deepseek.com";
+      document.getElementById("ai-model").value = c.model || "deepseek-chat";
+      document.getElementById("ai-cfg-msg").textContent = c.configured ? "✓ 已配置 " + c.key_masked : "尚未配置 Key,请在下方填写";
+      const dot = document.getElementById("ai-fab-dot");
+      if (dot) dot.style.display = c.configured ? "none" : "block";
+    } catch (e) { document.getElementById("ai-cfg-msg").textContent = "读取配置失败:" + e.message; }
+  }
+
+  const saveCfg = document.getElementById("ai-save-cfg");
+  if (saveCfg) saveCfg.onclick = async () => {
+    const body = {
+      api_key: document.getElementById("ai-key").value.trim(),
+      base_url: document.getElementById("ai-base").value.trim(),
+      model: document.getElementById("ai-model").value,
+    };
+    if (!body.api_key && !document.getElementById("ai-key").placeholder.includes("已配置")) {
+      document.getElementById("ai-cfg-msg").textContent = "请填写 API Key"; return;
+    }
+    try {
+      await api("/api/ai/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      document.getElementById("ai-cfg-msg").textContent = "✓ 已保存";
+      loadAiCfg();
+    } catch (e) { document.getElementById("ai-cfg-msg").textContent = "保存失败:" + e.message; }
+  };
+
+  const testCfg = document.getElementById("ai-test-cfg");
+  if (testCfg) testCfg.onclick = async () => {
+    document.getElementById("ai-cfg-msg").textContent = "测试中…";
+    const body = {
+      api_key: document.getElementById("ai-key").value.trim() || null,
+      base_url: document.getElementById("ai-base").value.trim(),
+      model: document.getElementById("ai-model").value,
+    };
+    try {
+      const r = await api("/api/ai/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      document.getElementById("ai-cfg-msg").textContent = r.ok ? "✓ 连接成功:" + String(r.reply || "").slice(0, 20) : "✗ " + (r.error || "失败");
+    } catch (e) { document.getElementById("ai-cfg-msg").textContent = "测试异常:" + e.message; }
+  };
+
+  const drop = document.getElementById("ai-drop");
+  const fileInp = document.getElementById("ai-file");
+  drop.onclick = () => fileInp.click();
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("on"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("on"); }));
+  drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) runAnalyze(f); });
+  fileInp.onchange = () => { if (fileInp.files[0]) runAnalyze(fileInp.files[0]); fileInp.value = ""; };
+
+  async function runAnalyze(file) {
+    if (file.size > 30 * 1024 * 1024) { alert("文件过大(>30MB)"); return; }
+    const prog = document.getElementById("ai-progress");
+    const resBox = document.getElementById("ai-result");
+    prog.style.display = "block";
+    resBox.innerHTML = "";
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/ai/analyze", { method: "POST", body: fd });
+      if (!res.ok) {
+        let m = "分析失败(" + res.status + ")";
+        try { const j = await res.json(); m = j.detail || m; } catch (e2) {}
+        resBox.innerHTML = '<div class="muted" style="color:#dc2626">⚠️ ' + esc(m) + "</div>";
+        prog.style.display = "none";
+        return;
+      }
+      const data = await res.json();
+      aiItems = data.items || [];
+      prog.style.display = "none";
+      if (!aiItems.length) { resBox.innerHTML = '<div class="muted">未识别到产品,请确认文件是产品清单。</div>'; return; }
+      renderAiResult();
+      confirmQueue = aiItems.filter((it) => !it.confident);
+      if (confirmQueue.length) startConfirm();
+    } catch (e) {
+      prog.style.display = "none";
+      resBox.innerHTML = '<div class="muted" style="color:#dc2626">⚠️ ' + esc(e.message || e) + "</div>";
+    }
+  }
+
+  function renderAiResult() {
+    const ok = aiItems.filter((i) => i.confident).length;
+    const warn = aiItems.length - ok;
+    const box = document.getElementById("ai-result");
+    let html = '<div class="ai-result-sum">共识别 <b>' + aiItems.length + "</b> 个产品(确定 " + ok + " / 待确认 " + warn + ")" + (warn ? " — 将逐个弹窗确认" : "") + "</div>";
+    html += aiItems.map((it, i) => {
+      const badge = it.confident ? "✅" : "⚠️";
+      const cls = it.confident ? "ok" : "warn";
+      const btn = it.confident ? "" : '<button class="btn ghost" style="padding:2px 8px" data-aiedit="' + i + '">确认</button>';
+      return '<div class="ai-item-card ' + cls + '"><span>' + badge + '</span><span class="nm" title="' + esc(it.name) + '">' + esc(it.name) + '</span><span class="muted">' + esc(it.model || "") + "</span>" + btn + "</div>";
+    }).join("");
+    box.innerHTML = html;
+    box.querySelectorAll("[data-aiedit]").forEach((b) => b.onclick = () => {
+      const i = Number(b.dataset.aiedit);
+      confirmQueue = [aiItems[i]];
+      confirmIdx = 0;
+      startConfirm();
+    });
+  }
+
+  function startConfirm() {
+    if (!confirmQueue.length) return;
+    confirmIdx = 0;
+    openConfirmModal();
+  }
+
+  function openConfirmModal() {
+    const it = confirmQueue[confirmIdx];
+    curEditor = it;
+    document.getElementById("ai-conf-idx").textContent = "第 " + (confirmIdx + 1) + " / " + confirmQueue.length + " 条(⚠️ AI 拿捏不准,请核对)";
+    document.getElementById("ai-c-name").value = it.name || "";
+    document.getElementById("ai-c-model").value = it.model || "";
+    document.getElementById("ai-c-cat").value = it.category || "";
+    document.getElementById("ai-c-tags").value = (it.tags || []).join(", ");
+    document.getElementById("ai-c-company").value = it.company || "";
+    document.getElementById("ai-c-mp").value = it.market_price ?? "";
+    document.getElementById("ai-c-cp").value = it.channel_price ?? "";
+    document.getElementById("ai-c-intro").value = it.intro || "";
+    document.getElementById("ai-c-params").value = it.params || "";
+    const unsure = [];
+    if (!it.name) unsure.push("名称缺失");
+    if (!it.model) unsure.push("型号未识别");
+    if (!it.category) unsure.push("类型未识别");
+    if (!it.company) unsure.push("厂商未识别");
+    if (!it.market_price && !it.channel_price) unsure.push("价格缺失");
+    const uBox = document.getElementById("ai-c-uncertain");
+    uBox.style.display = unsure.length ? "block" : "none";
+    uBox.textContent = "AI 可能拿不准:" + unsure.join("、") + " — 请核对/补充后点「保存此产品」;也可「下一个」跳过。";
+    document.getElementById("ai-c-prev").disabled = confirmIdx <= 0;
+    openModal("#modal-ai-confirm");
+  }
+
+  const btnPrev = document.getElementById("ai-c-prev");
+  const btnNext = document.getElementById("ai-c-next");
+  const btnSkip = document.getElementById("ai-c-skip");
+  const btnSave = document.getElementById("ai-c-save");
+  if (btnPrev) btnPrev.onclick = () => { if (confirmIdx > 0) { confirmIdx--; openConfirmModal(); } };
+  if (btnNext) btnNext.onclick = () => {
+    if (confirmIdx < confirmQueue.length - 1) { confirmIdx++; openConfirmModal(); }
+    else { alert("已是最后一条;可点「保存此产品」入库,或「上一个」回看"); }
+  };
+  if (btnSkip) btnSkip.onclick = () => {
+    closeModal();
+    const box = document.getElementById("ai-result");
+    box.innerHTML += '<div class="muted" style="margin-top:6px">已跳过待确认项,可在结果中点「确认」逐个处理。</div>';
+  };
+  if (btnSave) btnSave.onclick = async () => {
+    const payload = {
+      name: document.getElementById("ai-c-name").value.trim(),
+      model: document.getElementById("ai-c-model").value.trim(),
+      category: document.getElementById("ai-c-cat").value.trim(),
+      tags: document.getElementById("ai-c-tags").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+      company: document.getElementById("ai-c-company").value.trim(),
+      market_price: document.getElementById("ai-c-mp").value === "" ? null : Number(document.getElementById("ai-c-mp").value),
+      channel_price: document.getElementById("ai-c-cp").value === "" ? null : Number(document.getElementById("ai-c-cp").value),
+      intro: document.getElementById("ai-c-intro").value.trim(),
+      params: document.getElementById("ai-c-params").value.trim(),
+    };
+    if (!payload.name) { alert("请填写产品名称"); return; }
+    try {
+      await api("/api/products", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          name: payload.name, model: payload.model, category_name: payload.category,
+          company_name: payload.company, tag_ids: [], market_price: payload.market_price,
+          channel_price: payload.channel_price, intro: payload.intro, params: payload.params,
+        }),
+      });
+      const done = curEditor;
+      confirmQueue = confirmQueue.filter((x) => x !== done);
+      aiItems = aiItems.map((x) => (x === done ? Object.assign({}, x, { confident: true, _saved: true }) : x));
+      renderAiResult();
+      if (confirmQueue.length) openConfirmModal();
+      else { closeModal(); alert("✅ 全部确认完成!"); await loadProducts(); }
+    } catch (e) { alert("保存失败:" + e.message); }
+  };
+})();

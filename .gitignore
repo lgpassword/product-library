@@ -36,3 +36,6 @@ data.db
 *.db
 uploads/images/*
 !uploads/images/.gitkeep
+
+# 运行版本地备份(若误拷贝到此)
+_backups/

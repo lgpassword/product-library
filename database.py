@@ -77,6 +77,12 @@ CREATE TABLE IF NOT EXISTS folder (
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_product_category ON product(category_id);
 CREATE INDEX IF NOT EXISTS idx_product_company ON product(company_id);
 CREATE INDEX IF NOT EXISTS idx_product_name ON product(name);

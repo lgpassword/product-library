@@ -196,7 +196,7 @@
             <th style="width:64px">序号</th>
             <th>名称</th>
             <th style="width:110px">产品类型</th>
-            <th style="width:130px">市场价（可改）</th>
+            <th style="width:140px">市场价<span class="muted" style="font-weight:400;font-size:11px">(仅本单)</span></th>
             <th style="width:88px">渠道价</th>
             <th style="width:90px">操作</th>
           </tr>
@@ -438,6 +438,120 @@
 
 <input type="file" id="file-import" accept=".xlsx" style="display:none">
 
-<script src="app.js?v=2026090219"></script>
+<!-- AI 助手:浮动工具栏 -->
+<div id="ai-fab" title="AI 助手">
+  <span class="fab-icon">🤖</span>
+  <span class="fab-dot" id="ai-fab-dot" style="display:none"></span>
+</div>
+<div id="ai-panel" style="display:none">
+  <div class="ai-head">
+    <b>🤖 AI 产品录入助手</b>
+    <span class="ai-min" id="ai-min" title="最小化">–</span>
+    <span class="ai-x" id="ai-x" title="关闭">×</span>
+  </div>
+  <div class="ai-tabs">
+    <span class="ai-tab on" data-aitab="config">AI配置</span>
+    <span class="ai-tab" data-aitab="help">使用说明</span>
+    <span class="ai-tab" data-aitab="import">上传分析</span>
+  </div>
+  <!-- 配置页 -->
+  <div class="ai-page" data-aipage="config">
+    <label>API Key(DeepSeek)
+      <input type="password" class="input ai-inp" id="ai-key" placeholder="sk-...">
+    </label>
+    <label>接口地址
+      <input type="text" class="input ai-inp" id="ai-base" value="https://api.deepseek.com">
+    </label>
+    <label>模型
+      <select class="input ai-inp" id="ai-model">
+        <option value="deepseek-chat">deepseek-chat(推荐)</option>
+        <option value="deepseek-reasoner">deepseek-reasoner</option>
+      </select>
+    </label>
+    <button class="btn primary" id="ai-save-cfg" style="width:100%;margin-top:6px">保存配置</button>
+    <button class="btn ghost" id="ai-test-cfg" style="width:100%;margin-top:6px">测试连接</button>
+    <div class="ai-msg" id="ai-cfg-msg"></div>
+  </div>
+  <!-- 说明页 -->
+  <div class="ai-page" data-aipage="help" style="display:none">
+    <div class="ai-help">
+      <p><b>① 配置:</b>在“AI配置”填入 DeepSeek API Key 并保存(可点“测试连接”验证)。Key 仅存本机。</p>
+      <p><b>② 上传/拖入:</b>切到“上传分析”,点击或直接把 xlsx / docx / pdf / txt 文件拖入面板。支持产品清单、报价表、产品目录等。</p>
+      <p><b>③ AI 识别:</b>自动从文件中识别产品,生成:名称、型号、产品类型、标签、厂商、简介、参数、价格。</p>
+      <p><b>④ 确认入库:</b>AI 对“拿捏不准”的条目会逐个弹窗(下一个/上一个/编辑后保存),确认无误后保存到产品库,并从文件库关联来源。</p>
+      <p><b>注意:</b>生成结果若与已有产品重名(同型号)会自动跳过,不会重复入库。</p>
+    </div>
+  </div>
+  <!-- 上传分析页 -->
+  <div class="ai-page" data-aipage="import" style="display:none">
+    <div id="ai-drop" class="ai-drop">
+      <div class="ai-drop-icon">📤</div>
+      <div>点击选择 或 拖入文件到此处</div>
+      <div class="muted" style="font-size:12px">支持 .xlsx .docx .pdf .txt .csv(≤30MB)</div>
+    </div>
+    <input type="file" id="ai-file" accept=".xlsx,.docx,.pdf,.txt,.csv" style="display:none">
+    <div id="ai-progress" style="display:none" class="ai-prog">AI 分析中,请稍候…</div>
+    <div id="ai-result"></div>
+  </div>
+</div>
+
+<!-- 不确定项确认弹窗 -->
+<div class="modal" id="modal-ai-confirm" style="display:none">
+  <div class="modal-head">
+    <h2>确认产品信息</h2>
+    <button class="close" data-close>×</button>
+  </div>
+  <div class="modal-body" style="max-height:60vh;overflow:auto">
+    <div class="ai-conf-idx muted" id="ai-conf-idx"></div>
+    <div class="field"><label>产品名称 *</label><input class="input" id="ai-c-name"></div>
+    <div class="field"><label>型号</label><input class="input" id="ai-c-model"></div>
+    <div class="field"><label>产品类型</label><input class="input" id="ai-c-cat" placeholder="如:心理沙盘设备"></div>
+    <div class="field"><label>标签(逗号分隔)</label><input class="input" id="ai-c-tags"></div>
+    <div class="field"><label>厂商</label><input class="input" id="ai-c-company"></div>
+    <div class="field"><label>市场价</label><input class="input" type="number" step="0.01" id="ai-c-mp"></div>
+    <div class="field"><label>渠道价</label><input class="input" type="number" step="0.01" id="ai-c-cp"></div>
+    <div class="field"><label>简介</label><textarea class="input" id="ai-c-intro" rows="2"></textarea></div>
+    <div class="field"><label>参数</label><textarea class="input" id="ai-c-params" rows="4"></textarea></div>
+    <div class="ai-uncertain" id="ai-c-uncertain"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn ghost" id="ai-c-skip">跳过</button>
+    <button class="btn" id="ai-c-prev" disabled>上一个</button>
+    <button class="btn primary" id="ai-c-next">下一个</button>
+    <button class="btn primary" id="ai-c-save">保存此产品</button>
+  </div>
+</div>
+
+<style>
+#ai-fab{position:fixed;right:24px;bottom:84px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.4);z-index:9999;transition:transform .2s}
+#ai-fab:hover{transform:scale(1.08)}
+.fab-dot{position:absolute;top:2px;right:2px;width:12px;height:12px;background:#ef4444;border-radius:50%;border:2px solid #fff}
+#ai-panel{position:fixed;right:24px;bottom:150px;width:360px;max-height:70vh;background:#fff;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.25);z-index:10000;display:flex;flex-direction:column;overflow:hidden;color:#1f2937}
+.ai-head{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;padding:10px 14px;display:flex;align-items:center;font-size:14px}
+.ai-head b{flex:1}
+.ai-min,.ai-x{cursor:pointer;padding:0 6px;font-size:16px;opacity:.9}
+.ai-tabs{display:flex;background:#f3f4f6;border-bottom:1px solid #e5e7eb}
+.ai-tab{flex:1;text-align:center;padding:8px 0;cursor:pointer;font-size:13px;color:#6b7280;border-bottom:2px solid transparent}
+.ai-tab.on{color:#2563eb;font-weight:600;border-bottom-color:#2563eb}
+.ai-page{padding:14px;overflow-y:auto}
+.ai-inp{width:100%;margin:4px 0 10px;box-sizing:border-box}
+.ai-page label{font-size:13px;color:#374151;display:block}
+.ai-msg{font-size:12px;color:#2563eb;margin-top:8px;min-height:16px;white-space:pre-wrap}
+.ai-help{font-size:13px;line-height:1.8;color:#374151}
+.ai-help p{margin:0 0 8px}
+.ai-drop{border:2px dashed #cbd5e1;border-radius:12px;padding:30px 10px;text-align:center;color:#64748b;cursor:pointer;transition:.2s;background:#f8fafc}
+.ai-drop.on{border-color:#2563eb;background:#eff6ff}
+.ai-drop-icon{font-size:30px;margin-bottom:6px}
+.ai-prog{text-align:center;color:#2563eb;padding:16px;font-size:14px}
+.ai-prog:before{content:"";display:inline-block;width:16px;height:16px;margin-right:8px;border:2px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin 1s linear infinite;vertical-align:-3px}
+.ai-uncertain{margin-top:8px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:8px 10px;font-size:13px}
+.ai-result-sum{font-size:13px;color:#374151;margin-bottom:10px}
+.ai-item-card{border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;display:flex;align-items:center;gap:8px}
+.ai-item-card .nm{font-weight:600;color:#111827;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-item-card.ok{border-left:3px solid #10b981;background:#f0fdf4}
+.ai-item-card.warn{border-left:3px solid #f59e0b;background:#fffbeb}
+.ai-conf-idx{margin-bottom:10px;color:#6b7280}
+</style>
+<script src="app.js?v=2026090313"></script>
 </body>
 </html>
