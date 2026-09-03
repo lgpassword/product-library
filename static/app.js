@@ -748,57 +748,152 @@ async function renderHome() {
   const tagN = s.by_tag.filter((x) => x.value > 0).length;
   const today = new Date();
   const week = ["日", "一", "二", "三", "四", "五", "六"][today.getDay()];
-  const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日 · 星期${week}`;
+  const dateStr = `${today.getMonth() + 1}月${today.getDate()}日 星期${week}`;
+  const hour = today.getHours();
+  const greet = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
+
+  const catTop = s.by_category.filter((x) => x.value > 0).slice(0, 8);
+  const comTop = s.by_company.filter((x) => x.value > 0).slice(0, 8);
+  const maxCat = catTop.length ? catTop[0].value : 1;
+  const maxCom = comTop.length ? comTop[0].value : 1;
+
+  // 分类彩色横向条(纯CSS)
+  const catBars = catTop.map((c) => `
+    <div class="hb-row" style="cursor:pointer" title="查看「${esc(c.name)}」产品" onclick="gotoFiltered('cat','${esc(c.name)}')">
+      <span class="hb-name">${esc(c.name.length > 9 ? c.name.slice(0, 8) + "…" : c.name)}</span>
+      <span class="hb-track"><span class="hb-fill" style="width:${(c.value / maxCat * 100).toFixed(1)}%"></span></span>
+      <span class="hb-val">${c.value}</span>
+    </div>`).join("");
+
+  // 公司徽章流
+  const palette = ["#2563EB", "#0D9488", "#E8A33D", "#7C5CD6", "#E2725B", "#2B7FE0", "#14B8A6", "#F0B454"];
+  const comChips = comTop.map((c, i) =>
+    `<span class="com-chip" style="--cc:${palette[i % palette.length]};cursor:pointer" title="查看「${esc(c.name)}」产品" onclick="gotoFiltered('com','${esc(c.name)}')">${esc(c.name.length > 12 ? c.name.slice(0, 11) + "…" : c.name)} <b>${c.value}</b></span>`).join("");
+
+  // 热门产品(带图优先)
+  const topProds = (s.top_products || []).filter((x) => x.img_id).slice(0, 8);
+  const topCards = topProds.length ? topProds.map((p) => `
+    <div class="hot-card" onclick="openProductQuick(${p.id})">
+      <div class="hot-img"><img src="/api/attachments/${p.img_id}/raw" loading="lazy" onerror="this.closest('.hot-card').style.display='none'"></div>
+      <div class="hot-info">
+        <div class="hot-name">${esc(p.name.length > 16 ? p.name.slice(0, 15) + "…" : p.name)}</div>
+        <div class="hot-meta">${esc(p.model || "")}</div>
+        <div class="hot-price">${p.market_price != null ? "¥" + fmtPrice(p.market_price) : ""}</div>
+      </div>
+    </div>`).join("") : '<div class="muted" style="padding:24px">暂无产品图片 — 去"AI 助手/导入"添加吧</div>';
+
+  // 最新入库
+  const latest = (s.latest || []).slice(0, 7);
+  const latestList = latest.length ? `<div class="latest-list">${latest.map((p, i) => `
+    <div class="latest-row" onclick="openProductQuick(${p.id})">
+      <span class="latest-idx">${String(i + 1).padStart(2, "0")}</span>
+      <span class="latest-name">${esc(p.name.length > 24 ? p.name.slice(0, 23) + "…" : p.name)}</span>
+      <span class="latest-price">${p.market_price != null ? "¥" + fmtPrice(p.market_price) : ""}</span>
+    </div>`).join("")}</div>` : "";
 
   $("#home-content").innerHTML = `
     <div class="home-wrap">
       <div class="hero-banner">
+        <div class="hero-glow"></div>
         <div class="hero-inner">
-          <div class="hero-kicker">康复设备 · 医疗器械 · 特殊教育</div>
-          <div class="hero-title">欢迎使用康复特教产品库</div>
-          <div class="hero-sub">一站式管理康复辅具、心理设备、特教云平台等产品，支持局域网多端协同共享</div>
-          <div class="hero-meta">${dateStr}</div>
+          <div class="hero-kicker">${greet} · ${dateStr}</div>
+          <div class="hero-title">康复特教产品库</div>
+          <div class="hero-sub">一站式管理康复辅具 · 心理设备 · 特教平台 · 结构化教室 · 数字教育装备</div>
+          <div class="hero-actions">
+            <button class="btn hero-btn" onclick="gotoProducts()">📦 浏览产品</button>
+            <button class="btn hero-btn ghost" onclick="gotoFiles()">🗂 打开文件库</button>
+            <button class="btn hero-btn ghost" onclick="openAiFab()">🤖 AI 录入</button>
+          </div>
         </div>
+        <div class="hero-badge"><div class="badge-num">${s.total}</div><div class="badge-lbl">在库产品</div></div>
       </div>
 
       <div class="stats-grid">
-        <div class="stat-card" style="animation-delay:.15s;--accent:#2563EB">
+        <div class="stat-card" style="animation-delay:.1s;--accent:#2563EB">
           <div class="stat-icon" style="background:#E8F0FE;color:#2563EB">${STAT_ICONS.total}</div>
           <div><div class="num" data-count="${s.total}">0</div><div class="lbl">产品总数</div></div>
         </div>
-        <div class="stat-card" style="animation-delay:.25s;--accent:#0D9488">
+        <div class="stat-card" style="animation-delay:.2s;--accent:#0D9488">
           <div class="stat-icon" style="background:#E0F5F2;color:#0D9488">${STAT_ICONS.category}</div>
           <div><div class="num" data-count="${catN}">0</div><div class="lbl">产品类型</div></div>
         </div>
-        <div class="stat-card" style="animation-delay:.35s;--accent:#E8A33D">
+        <div class="stat-card" style="animation-delay:.3s;--accent:#E8A33D">
           <div class="stat-icon" style="background:#FDF3E3;color:#E8A33D">${STAT_ICONS.company}</div>
           <div><div class="num" data-count="${comN}">0</div><div class="lbl">合作公司</div></div>
         </div>
-        <div class="stat-card" style="animation-delay:.45s;--accent:#7C5CD6">
+        <div class="stat-card" style="animation-delay:.4s;--accent:#7C5CD6">
           <div class="stat-icon" style="background:#F0EBFC;color:#7C5CD6">${STAT_ICONS.tag}</div>
           <div><div class="num" data-count="${tagN}">0</div><div class="lbl">标签种类</div></div>
         </div>
       </div>
 
-      <div class="chart-grid">
-        <div class="chart-box wide"><h3>产品类型分布</h3><div style="height:340px"><canvas id="ch-cat"></canvas></div></div>
-        <div class="chart-box"><h3>合作公司产品数量</h3><div style="height:300px"><canvas id="ch-com"></canvas></div></div>
-        <div class="chart-box"><h3>标签分布（症状 / 适应症）</h3><div style="height:300px"><canvas id="ch-tag"></canvas></div></div>
+      <div class="home-cols">
+        <div class="panel">
+          <div class="panel-head"><h3>🔥 热门产品</h3><span class="muted" style="font-size:12px">覆盖各大类型 · 点击查看</span></div>
+          <div class="hot-grid">${topCards}</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>🕒 最新入库</h3><span class="muted" style="font-size:12px">最近添加 · 点击查看</span></div>
+          ${latestList}
+        </div>
+      </div>
+
+      <div class="home-cols">
+        <div class="panel">
+          <div class="panel-head"><h3>📊 产品类型分布</h3><span class="muted" style="font-size:12px">Top ${catTop.length}</span></div>
+          <div class="hb-list">${catBars}</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>🏢 合作公司</h3><span class="muted" style="font-size:12px">产品数量 TOP</span></div>
+          <div class="com-wrap">${comChips}</div>
+        </div>
       </div>
     </div>`;
 
-  // 数字滚动动画
   $$("#home-content .num").forEach((el) => {
     const target = Number(el.dataset.count) || 0;
     animateNumber(el, target);
   });
-
   chartInstances.forEach((c) => c.destroy());
   chartInstances = [];
-  chartInstances.push(makeHBar("#ch-cat", s.by_category.filter((x) => x.value > 0), ["#1663C7", "#0D9488", "#E8A33D", "#7C5CD6", "#E2725B", "#2B7FE0", "#14B8A6", "#F0B454", "#9B7FE8", "#EA8C7C", "#4A90D9", "#2CA6A4", "#EFAF62", "#8E6EE0", "#EE968A", "#5FA8E3", "#3CB0AC"]));
-  chartInstances.push(makeHBar("#ch-com", s.by_company.filter((x) => x.value > 0), ["#0D9488", "#14B8A6", "#2CA6A4", "#3CB0AC", "#4AB4B0", "#59BEB6", "#68C8C0", "#77D2CA", "#86DCD4", "#95E6DE", "#A4F0E8", "#B3FAF2"]));
-  chartInstances.push(makeHBar("#ch-tag", s.by_tag.filter((x) => x.value > 0), ["#7C5CD6", "#9B7FE8", "#8E6EE0", "#6D4BD0", "#A98FF0", "#5E3BC8", "#B8A2F4", "#5230BE", "#C4B2F8", "#4625B4", "#D0C2FA", "#3A1AAA", "#E4D8FC", "#2E0F98", "#F0E8FE", "#22078C", "#14006E", "#08004A"]));
 }
+
+function gotoProducts() { switchView("products"); }
+function gotoFiles() { switchView("files"); }
+
+// 首页点击分类/公司 → 切到产品库并按名筛选(选下拉框里匹配项)
+window.gotoFiltered = async function (kind, name) {
+  switchView("products");
+  await loadDicts();
+  const catSel = $("#f-category");
+  const comSel = $("#f-company");
+  const tagSel = $("#f-tag");
+  const q = $("#q");
+  let matched = false;
+  if (kind === "cat" && catSel) {
+    for (const o of catSel.options) if (o.text === name) { catSel.value = o.value; matched = true; break; }
+  } else if (kind === "com" && comSel) {
+    for (const o of comSel.options) if (o.text === name) { comSel.value = o.value; matched = true; break; }
+  }
+  if (!matched && q) q.value = name;  // 下拉没匹配到,退化为关键词搜索
+  state.filters = collectFilters();
+  state.page = 1;
+  await loadProducts();
+  // 若在下拉匹配,保持选中
+};
+
+// 键盘 "/" 快速聚焦产品搜索
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+    e.preventDefault();
+    const q = $("#q");
+    if (q) { switchView("products"); setTimeout(() => q.focus(), 60); }
+  }
+});
+function openAiFab() { const f = $("#ai-fab"); if (f) f.click(); }
+window.openProductQuick = async function (id) {
+  try { await openDetail(id); } catch (e) {}
+};
 
 // 横向条形图：条在右侧延伸，类目名在左侧完整显示，永不挤压文字
 function makeHBar(canvasId, data, colors) {
@@ -1962,4 +2057,14 @@ function dismissSplash() {
       else { closeModal(); alert("✅ 全部确认完成!"); await loadProducts(); }
     } catch (e) { alert("保存失败:" + e.message); }
   };
+})();
+
+// 回到顶部
+(function () {
+  const btn = document.getElementById("btn-top");
+  if (!btn) return;
+  window.addEventListener("scroll", () => {
+    btn.style.display = (document.documentElement.scrollTop || document.body.scrollTop) > 400 ? "flex" : "none";
+  }, { passive: true });
+  btn.onclick = () => window.scrollTo({ top: 0, behavior: "smooth" });
 })();

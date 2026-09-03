@@ -1537,8 +1537,35 @@ def get_stats():
     by_tag = [dict(r) for r in conn.execute(
         "SELECT t.name AS name, COUNT(pt.product_id) AS value FROM tag t "
         "LEFT JOIN product_tag pt ON pt.tag_id=t.id GROUP BY t.id ORDER BY value DESC").fetchall()]
+    # 最新入库 8 条(首页展示,带首图)
+    latest = [dict(r) for r in conn.execute(
+        "SELECT p.id, p.name, p.market_price, p.model FROM product p "
+        "ORDER BY p.id DESC LIMIT 8").fetchall()]
+    for p in latest:
+        att = conn.execute(
+            "SELECT id FROM attachment WHERE product_id=? AND kind='image' ORDER BY id LIMIT 1",
+            (p["id"],)).fetchone()
+        p["img_id"] = att["id"] if att else None
+    # 分类 Top 各抽 1 条作为"热门产品"(带图,凑 8 张)
+    top = []
+    seen = set()
+    for c in [r for r in by_category if r["value"] > 0][:12]:
+        r = conn.execute(
+            "SELECT p.id, p.name, p.market_price, p.model FROM product p "
+            "WHERE p.category_id=(SELECT id FROM category WHERE name=?) "
+            "ORDER BY p.id DESC LIMIT 1", (c["name"],)).fetchone()
+        if not r or r["id"] in seen:
+            continue
+        seen.add(r["id"])
+        att = conn.execute(
+            "SELECT id FROM attachment WHERE product_id=? AND kind='image' ORDER BY id LIMIT 1",
+            (r["id"],)).fetchone()
+        top.append({**dict(r), "img_id": att["id"] if att else None})
+        if len(top) >= 8:
+            break
     conn.close()
-    return {"total": total, "by_category": by_category, "by_company": by_company, "by_tag": by_tag}
+    return {"total": total, "by_category": by_category, "by_company": by_company,
+            "by_tag": by_tag, "latest": latest, "top_products": top}
 
 
 # ---------- 备份 ----------

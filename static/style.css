@@ -929,3 +929,56 @@ body::after {
   position: absolute; top: 8px; right: 12px;
   font-size: 15px; opacity: .85;
 }
+
+/* ===== 首页看板 v2 ===== */
+.home-cols{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;margin-bottom:22px}
+.home-cols .panel{background:#fff;border:1px solid #eef0f4;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(15,23,42,.04)}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.panel-head h3{margin:0;font-size:16px;color:#111827}
+/* hero 增强 */
+.hero-banner{position:relative;overflow:hidden;border-radius:20px;background:linear-gradient(120deg,#1d4ed8,#7c3aed 60%,#9333ea);min-height:190px;display:flex;align-items:center;color:#fff;padding:34px 44px;box-shadow:0 12px 32px rgba(79,70,229,.25);margin-bottom:22px}
+.hero-glow{position:absolute;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 65%);top:-160px;right:-60px;pointer-events:none}
+.hero-glow::after{content:"";position:absolute;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12),transparent 65%);left:-190px;bottom:-160px}
+.hero-inner{position:relative;z-index:1;flex:1}
+.hero-kicker{font-size:13px;letter-spacing:1px;opacity:.9;margin-bottom:6px}
+.hero-title{font-size:30px;font-weight:800;letter-spacing:1px;margin-bottom:8px}
+.hero-sub{font-size:14px;opacity:.9;margin-bottom:18px}
+.hero-actions{display:flex;gap:10px}
+.hero-btn{background:#fff;color:#1d4ed8;font-weight:600;border:none;border-radius:10px;padding:9px 18px;cursor:pointer;font-size:14px;transition:.2s}
+.hero-btn.ghost{background:rgba(255,255,255,.16);color:#fff}
+.hero-btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.hero-badge{position:relative;z-index:1;margin-left:30px;text-align:center;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);border-radius:18px;padding:18px 26px;backdrop-filter:blur(4px);min-width:120px}
+.badge-num{font-size:44px;font-weight:800;line-height:1}
+.badge-lbl{font-size:13px;opacity:.92;margin-top:6px}
+/* 热门产品卡 */
+.hot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.hot-card{background:#fff;border:1px solid #eef0f4;border-radius:14px;overflow:hidden;cursor:pointer;transition:.2s;box-shadow:0 1px 4px rgba(15,23,42,.05)}
+.hot-card:hover{transform:translateY(-4px);box-shadow:0 8px 22px rgba(15,23,42,.12);border-color:#dbe3f0}
+.hot-img{height:120px;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.hot-img img{width:100%;height:100%;object-fit:contain}
+.hot-info{padding:9px 11px 11px}
+.hot-name{font-size:13px;font-weight:600;color:#111827;line-height:1.35;min-height:36px}
+.hot-meta{font-size:11px;color:#9ca3af;margin:2px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hot-price{font-size:14px;font-weight:700;color:#dc2626}
+/* 最新入库 */
+.latest-list{display:flex;flex-direction:column}
+.latest-row{display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:10px;cursor:pointer;transition:background .15s;border-bottom:1px dashed #f0f1f5}
+.latest-row:last-child{border-bottom:none}
+.latest-row:hover{background:#f5f7ff}
+.latest-idx{font-size:13px;font-weight:700;color:#c7d2fe;width:22px;text-align:center}
+.latest-name{flex:1;font-size:13.5px;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.latest-price{font-size:13px;color:#dc2626;font-weight:600}
+/* 横向条 */
+.hb-list{display:flex;flex-direction:column;gap:11px}
+.hb-row{display:flex;align-items:center;gap:10px}
+.hb-name{width:105px;font-size:12.5px;color:#374151;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb-track{flex:1;height:9px;background:#eef1f6;border-radius:5px;overflow:hidden}
+.hb-fill{display:block;height:100%;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:5px;transition:width 1s ease}
+.hb-val{font-size:12.5px;font-weight:700;color:#2563eb;width:34px}
+/* 公司徽章 */
+.com-wrap{display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start}
+.com-chip{display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--cc,#2563EB) 8%,#fff);border:1px solid color-mix(in srgb,var(--cc,#2563EB) 26%,#fff);color:var(--cc,#2563EB);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:500;transition:.2s;cursor:default}
+.com-chip b{background:var(--cc,#2563EB);color:#fff;border-radius:999px;padding:0 7px;font-size:11px;line-height:17px}
+.com-chip:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(15,23,42,.1)}
+@media(max-width:1100px){.home-cols{grid-template-columns:1fr}.hot-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.hot-grid{grid-template-columns:repeat(2,1fr)}.hero-banner{padding:24px}.hero-badge{display:none}}

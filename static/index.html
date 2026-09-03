@@ -439,6 +439,7 @@
 <input type="file" id="file-import" accept=".xlsx" style="display:none">
 
 <!-- AI 助手:浮动工具栏 -->
+<div id="btn-top" title="回到顶部" style="display:none">↑</div>
 <div id="ai-fab" title="AI 助手">
   <span class="fab-icon">🤖</span>
   <span class="fab-dot" id="ai-fab-dot" style="display:none"></span>
@@ -450,12 +451,12 @@
     <span class="ai-x" id="ai-x" title="关闭">×</span>
   </div>
   <div class="ai-tabs">
-    <span class="ai-tab on" data-aitab="config">AI配置</span>
+    <span class="ai-tab on" data-aitab="import">上传分析</span>
+    <span class="ai-tab" data-aitab="config">AI配置</span>
     <span class="ai-tab" data-aitab="help">使用说明</span>
-    <span class="ai-tab" data-aitab="import">上传分析</span>
   </div>
   <!-- 配置页 -->
-  <div class="ai-page" data-aipage="config">
+  <div class="ai-page" data-aipage="config" style="display:none">
     <label>API Key(DeepSeek)
       <input type="password" class="input ai-inp" id="ai-key" placeholder="sk-...">
     </label>
@@ -482,8 +483,8 @@
       <p><b>注意:</b>生成结果若与已有产品重名(同型号)会自动跳过,不会重复入库。</p>
     </div>
   </div>
-  <!-- 上传分析页 -->
-  <div class="ai-page" data-aipage="import" style="display:none">
+  <!-- 上传分析页(默认页) -->
+  <div class="ai-page" data-aipage="import">
     <div id="ai-drop" class="ai-drop">
       <div class="ai-drop-icon">📤</div>
       <div>点击选择 或 拖入文件到此处</div>
@@ -523,6 +524,8 @@
 </div>
 
 <style>
+#btn-top{position:fixed;right:26px;bottom:152px;width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #dbe2ee;color:#475569;font-size:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(15,23,42,.12);z-index:9998;transition:.2s}
+#btn-top:hover{background:#2563eb;color:#fff;border-color:#2563eb}
 #ai-fab{position:fixed;right:24px;bottom:84px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.4);z-index:9999;transition:transform .2s}
 #ai-fab:hover{transform:scale(1.08)}
 .fab-dot{position:absolute;top:2px;right:2px;width:12px;height:12px;background:#ef4444;border-radius:50%;border:2px solid #fff}
