@@ -32,6 +32,21 @@ def port_in_use(port):
 if __name__ == "__main__":
     PORT = 8000
     _log(f"===== 启动入口被调用 (argv={sys.argv}) =====")
+
+    # 关键:pythonw.exe 无控制台,sys.stdout/stderr 为 None,
+    # uvicorn 初始化日志时会调用 sys.stdout.isatty() 导致 AttributeError 崩溃。
+    # 这里把标准输出/错误重定向到日志文件,保证无窗口环境下也能正常启动。
+    try:
+        if sys.stdout is None or sys.stderr is None:
+            _flog = open(LOG_PATH, "a", encoding="utf-8")
+            if sys.stdout is None:
+                sys.stdout = _flog
+            if sys.stderr is None:
+                sys.stderr = _flog
+            _log("已重定向 stdout/stderr 到日志(pythonw 无控制台模式)")
+    except Exception:
+        pass
+
     try:
         if port_in_use(PORT):
             _log(f"端口 {PORT} 已被占用,判定服务已在运行,本次静默退出(exit 0)")
