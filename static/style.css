@@ -592,6 +592,9 @@ body::after {
 .detail-item { background: #F7FAFD; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .detail-item .k { font-size: 11.5px; color: var(--text-muted); margin-bottom: 2px; }
 .detail-item .v { font-size: 13.5px; font-weight: 550; }
+.detail-grid .full, .detail-item.full { grid-column: 1 / -1; }
+.img-gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.img-gallery img { height: 120px; max-width: 180px; object-fit: contain; border-radius: 8px; border: 1px solid var(--border); cursor: zoom-in; }
 
 .tags-picker { display: flex; flex-wrap: wrap; gap: 7px; }
 .chip {
