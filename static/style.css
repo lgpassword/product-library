@@ -991,3 +991,7 @@ body::after {
 .sel-float-actions{display:flex;gap:8px}
 .sel-float .btn{padding:7px 16px;border-radius:999px;font-size:13.5px}
 @media(max-width:640px){.sel-float{width:92%;justify-content:space-between;gap:8px;padding:10px 14px}}
+
+/* 详情弹窗头部操作区(加入购物车 + 关闭) */
+.head-actions{display:flex;align-items:center;gap:10px}
+.btn-cart-detail{box-shadow:0 2px 6px rgba(37,99,235,.25)}

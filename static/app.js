@@ -1306,6 +1306,12 @@ async function openDetail(id) {
     </div>`;
   $("#modal-detail").classList.add("wide");
   openModal("#modal-detail");
+
+  // 详情右上角"加入购物车":把当前产品加入购物车(项目选择弹窗)
+  const btnCart = $("#btn-detail-cart");
+  if (btnCart) {
+    btnCart.onclick = () => openCartAddModal([p.id]);
+  }
 }
 
 // ---------- 导入导出备份 ----------
