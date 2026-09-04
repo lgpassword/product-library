@@ -1001,7 +1001,7 @@ function renderTable(items) {
       <td><input type="checkbox" class="product-check" data-id="${p.id}" ${productSelected.has(p.id) ? "checked" : ""}></td>
       <td>${img}</td>
       <td class="muted">${esc(p.seq || "—")}</td>
-      <td><div class="name-cell">${esc(p.name)}</div><div class="muted" style="font-size:12px">${esc((p.intro || "").slice(0, 40))}</div></td>
+      <td><div class="name-cell"><a class="link" data-act="view" data-id="${p.id}" title="点击查看详情">${esc(p.name)}</a></div><div class="muted" style="font-size:12px">${esc((p.intro || "").slice(0, 40))}</div></td>
       <td class="muted">${esc(p.model || "—")}</td>
       <td class="muted">${esc(p.category_name || "—")}</td>
       <td class="muted">${esc(p.company_name || "—")}</td>

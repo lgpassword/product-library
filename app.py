@@ -178,9 +178,22 @@ def list_products(
     where = []
     args = []
     if search:
-        like = f"%{search}%"
-        where.append("(p.name LIKE ? OR p.model LIKE ? OR p.intro LIKE ? OR p.params LIKE ? OR p.seq LIKE ?)")
-        args += [like, like, like, like, like]
+        # 空格分词:每个词都必须命中(AND),词内多字段 OR(名称/型号/序号/介绍/参数/类型/公司/标签)
+        # 这样既能模糊搜到,又不会混入只命中部分词的无关结果
+        terms = [t for t in re.split(r"[\s,，、]+", search) if t]
+        if not terms:
+            terms = [search]
+        for t in terms:
+            like = f"%{t}%"
+            where.append("""(
+                p.name LIKE ? OR p.model LIKE ? OR p.seq LIKE ?
+                OR p.intro LIKE ? OR p.params LIKE ?
+                OR EXISTS (SELECT 1 FROM category c WHERE c.id=p.category_id AND c.name LIKE ?)
+                OR EXISTS (SELECT 1 FROM company co WHERE co.id=p.company_id AND co.name LIKE ?)
+                OR EXISTS (SELECT 1 FROM product_tag pt JOIN tag t ON t.id=pt.tag_id
+                           WHERE pt.product_id=p.id AND t.name LIKE ?)
+            )""")
+            args += [like] * 8
     if category_id:
         where.append("p.category_id=?")
         args.append(category_id)
@@ -1255,9 +1268,19 @@ def export_products(
     where = []
     args = []
     if search:
-        like = f"%{search}%"
-        where.append("(p.name LIKE ? OR p.model LIKE ? OR p.intro LIKE ? OR p.params LIKE ?)")
-        args += [like, like, like, like]
+        # 与列表接口保持一致:空格分词,每词必中,覆盖类型/公司/标签
+        terms = [t for t in re.split(r"[\s,，、]+", search) if t] or [search]
+        for t in terms:
+            like = f"%{t}%"
+            where.append("""(
+                p.name LIKE ? OR p.model LIKE ? OR p.seq LIKE ?
+                OR p.intro LIKE ? OR p.params LIKE ?
+                OR EXISTS (SELECT 1 FROM category c WHERE c.id=p.category_id AND c.name LIKE ?)
+                OR EXISTS (SELECT 1 FROM company co WHERE co.id=p.company_id AND co.name LIKE ?)
+                OR EXISTS (SELECT 1 FROM product_tag pt JOIN tag t ON t.id=pt.tag_id
+                           WHERE pt.product_id=p.id AND t.name LIKE ?)
+            )""")
+            args += [like] * 8
     if category_id:
         where.append("p.category_id=?"); args.append(category_id)
     if company_id:
