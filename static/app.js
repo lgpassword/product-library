@@ -983,6 +983,35 @@ document.addEventListener("click", (e) => {
   collapsed.style.display = isExpanded ? "block" : "none";
 });
 
+// 生成"命中摘要":无搜索时显示介绍前40字;有搜索时定位关键词在介绍/参数中的位置,截取上下文并高亮
+function makeSnippet(p, q) {
+  const hl = (s) => `<span style="background:#fde68a;color:#92400e;border-radius:3px;padding:0 2px">${esc(s)}</span>`;
+  const abs = Math.abs;
+  const pick = (text, tag) => {
+    if (!text) return null;
+    // 找第一个命中词的位置
+    let pos = -1;
+    for (const t of q.split(/\s+/) ) {
+      if (!t) continue;
+      const i = text.indexOf(t);
+      if (i >= 0 && (pos < 0 || i < pos)) pos = i;
+    }
+    if (pos < 0) return null;
+    const start = Math.max(0, pos - 18);
+    const end = Math.min(text.length, pos + 30);
+    let frag = (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+    // 高亮所有命中词
+    for (const t of q.split(/\s+/)) {
+      if (!t) continue;
+      frag = frag.split(t).join(hl(t));
+    }
+    return `<span style="opacity:.75">[${tag}]</span> ${frag}`;
+  };
+  if (!q) return esc((p.intro || "").slice(0, 40));
+  // 名称已显示在上一行,优先展示介绍/参数中的命中;都没有则退回首40字
+  return pick(p.params, "参数") || pick(p.intro, "介绍") || esc((p.intro || "").slice(0, 40));
+}
+
 function renderTable(items) {
   const tbody = $("#tbody");  $("#empty").style.display = items.length ? "none" : "block";
   tbody.innerHTML = items.map((p) => {
@@ -994,6 +1023,9 @@ function renderTable(items) {
       `<a class="link" href="/api/attachments/${f.id}/download" target="_blank" title="${esc(f.filename)}">${esc(f.filename)}</a>`
     ).join("");
     const time = (p.created_at || "").slice(0, 10);
+    // 命中摘要:搜索时,若命中在介绍/参数里,展示该字段中含关键词的上下文(高亮),让用户明白"为何搜到"
+    const qNow = (($("#q") && $("#q").value) || "").trim();
+    const snippet = makeSnippet(p, qNow);
     const src = p.source_file_id
       ? `<a class="link src-file-link" data-src-file="${p.source_file_id}" data-src-name="${esc(p.source_filename || "")}" title="来源文件:${esc(p.source_filename || "")}">${esc((p.source_filename || "").length > 18 ? (p.source_filename || "").slice(0, 17) + "…" : p.source_filename || "")}</a>`
       : '<span class="muted">—</span>';
@@ -1001,7 +1033,7 @@ function renderTable(items) {
       <td><input type="checkbox" class="product-check" data-id="${p.id}" ${productSelected.has(p.id) ? "checked" : ""}></td>
       <td>${img}</td>
       <td class="muted">${esc(p.seq || "—")}</td>
-      <td><div class="name-cell"><a class="link" data-act="view" data-id="${p.id}" title="点击查看详情">${esc(p.name)}</a></div><div class="muted" style="font-size:12px">${esc((p.intro || "").slice(0, 40))}</div></td>
+      <td><div class="name-cell"><a class="link" data-act="view" data-id="${p.id}" title="点击查看详情">${esc(p.name)}</a></div><div class="muted" style="font-size:12px">${snippet}</div></td>
       <td class="muted">${esc(p.model || "—")}</td>
       <td class="muted">${esc(p.category_name || "—")}</td>
       <td class="muted">${esc(p.company_name || "—")}</td>
